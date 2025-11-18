@@ -4,9 +4,9 @@ import random
 import time
 from dataclasses import dataclass
 from gurobipy import GRB
-from settings import get_gurobi_credentials
-from tsp import TSPInstance
 from typing import List, Optional, Callable
+from utils.settings import WLSACCESSID, WLSSECRET, LICENSEID
+from utils.tsp import TSPInstance
 
 
 @dataclass
@@ -132,7 +132,7 @@ def tour_cost(dist: list[list[float]], tour: list[int]) -> float:
 def tour_to_solution_dict(
     tour: list[int],
     x_vars: dict[tuple[int, int], gp.Var]
-) -> dict[gp.Var, gp.Var.X]:
+) -> dict[gp.Var, float]:
     """Convert a tour to a {var: value} dict suitable for cbSetSolution()."""
     n = len(tour)
     sol = {}
@@ -213,7 +213,12 @@ class GurobiTSPSolver:
         dist = instance.distances
 
         # Create model with credentials
-        params = get_gurobi_credentials()
+        params = {
+            "WLSACCESSID": WLSACCESSID,
+            "WLSSECRET": WLSSECRET,
+            "LICENSEID": int(LICENSEID)
+        }
+        print(params)
         env = gp.Env(params=params)
         model = gp.Model("TSP", env=env)
         self.config.apply_to_model(model)

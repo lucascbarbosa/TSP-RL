@@ -1,42 +1,5 @@
 """Settings and environment variable management for TSP-RL project."""
 import os
-from typing import Optional
-
-
-def get_gurobi_credentials() -> dict:
-    """
-    Get Gurobi credentials from environment variables.
-    
-    Returns:
-        dict: Dictionary with WLSACCESSID, WLSSECRET, and LICENSEID
-    """
-    wls_access_id = os.getenv('WLSACCESSID')
-    wls_secret = os.getenv('WLSSECRET')
-    license_id = os.getenv('LICENSEID')
-    
-    if not all([wls_access_id, wls_secret, license_id]):
-        raise ValueError(
-            "Gurobi credentials not found in environment variables. "
-            "Please set WLSACCESSID, WLSSECRET, and LICENSEID."
-        )
-    
-    params = {
-        "WLSACCESSID": wls_access_id,
-        "WLSSECRET": wls_secret,
-        "LICENSEID": int(license_id)
-    }
-    
-    return params
-
-
-def get_tsp_data_path() -> Optional[str]:
-    """
-    Get path to TSP data directory from environment variable.
-    
-    Returns:
-        Optional[str]: Path to TSP data directory, or None if not set
-    """
-    return os.getenv('TSP_DATA_PATH')
 
 
 # Default configuration values
@@ -45,3 +8,29 @@ DEFAULT_MIP_GAP = 0.01
 DEFAULT_THREADS = 4
 DEFAULT_VERBOSE = True
 
+# Main script configuration
+MODE = 'gurobi'  # Options: 'gurobi', 'qlearning', 'compare'
+INSTANCE = ''  # Path to TSPLIB instance file
+RANDOM = 30  # Generate random instance with N cities
+SEED = 42  # Random seed
+
+# Gurobi options
+WLSACCESSID = os.getenv('WLSACCESSID')
+WLSSECRET = os.getenv('WLSSECRET')
+LICENSEID = os.getenv('LICENSEID')
+TIME_LIMIT = 60.0  # Time limit in seconds
+MIP_GAP = 0.01  # MIP gap
+THREADS = 1  # Number of threads
+USE_MTZ = False  # Use MTZ constraints
+USE_CALLBACK = False  # Use subtour elimination callback
+USE_HYPER_HEURISTIC = False  # Use hyper-heuristic callback
+
+# Q-learning options
+EPISODES = 250  # Number of training episodes
+STEPS = 150  # Steps per episode
+BOUND_MODE = 'mst'  # Lower bound mode: 'mst', '1tree', 'concorde'
+EARLY_STOP_GAP = 0.01  # Early stopping gap threshold
+PATIENCE = 35  # Early stopping patience
+
+# Output options
+PLOT = False  # Plot results

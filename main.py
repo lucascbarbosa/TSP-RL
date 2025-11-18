@@ -1,5 +1,4 @@
 """Main script for TSP-RL project."""
-import argparse
 import numpy as np
 from typing import Optional
 from utils.gurobi import (
@@ -13,6 +12,24 @@ from utils.q import (
     plot_tour,
     tour_length,
     train_qhh_with_early_stopping,
+)
+from utils.settings import (
+    MODE,
+    INSTANCE,
+    RANDOM,
+    SEED,
+    TIME_LIMIT,
+    MIP_GAP,
+    THREADS,
+    USE_MTZ,
+    USE_CALLBACK,
+    USE_HYPER_HEURISTIC,
+    EPISODES,
+    STEPS,
+    BOUND_MODE,
+    EARLY_STOP_GAP,
+    PATIENCE,
+    PLOT,
 )
 from utils.tsp import TSPInstance
 
@@ -96,132 +113,22 @@ def train_q_learning(
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description='TSP-RL: TSP solving with Reinforcement Learning'
-    )
-    parser.add_argument(
-        '--mode',
-        type=str,
-        choices=['gurobi', 'qlearning', 'compare'],
-        default='gurobi',
-        help='Solving mode'
-    )
-    parser.add_argument(
-        '--instance',
-        type=str,
-        help='Path to TSPLIB instance file',
-        default='data/tsplib/gr17.tsp'
-    )
-    parser.add_argument(
-        '--random',
-        type=int,
-        metavar='N',
-        help='Generate random instance with N cities',
-        default=30
-    )
-    parser.add_argument(
-        '--seed',
-        type=int,
-        default=42,
-        help='Random seed',
-    )
-
-    # Gurobi options
-    parser.add_argument(
-        '--time-limit',
-        type=float,
-        help='Time limit in seconds',
-        default=60
-    )
-    parser.add_argument(
-        '--mip-gap',
-        type=float,
-        help='MIP gap (default: 0.01)',
-        default=0.01
-    )
-    parser.add_argument(
-        '--threads',
-        type=int,
-        help='Number of threads',
-        default=1
-    )
-    parser.add_argument(
-        '--use-mtz',
-        action='store_true',
-        help='Use MTZ constraints',
-        default=False
-    )
-    parser.add_argument(
-        '--use-callback',
-        action='store_true',
-        help='Use subtour elimination callback',
-        default=False
-    )
-    parser.add_argument(
-        '--use-hyper-heuristic',
-        action='store_true',
-        help='Use hyper-heuristic callback',
-        default=False
-    )
-
-    # Q-learning options
-    parser.add_argument(
-        '--episodes',
-        type=int,
-        help='Number of training episodes',
-        default=250
-    )
-    parser.add_argument(
-        '--steps',
-        type=int,
-        help='Steps per episode',
-        default=150
-    )
-    parser.add_argument(
-        '--bound-mode',
-        type=str,
-        choices=['mst', '1tree', 'concorde'],
-        help='Lower bound mode for early stopping',
-        default='mst'
-    )
-    parser.add_argument(
-        '--early-stop-gap',
-        type=float,
-        help='Early stopping gap threshold',
-        default=0.01
-    )
-    parser.add_argument(
-        '--patience',
-        type=int,
-        help='Early stopping patience',
-        default=35
-    )
-
-    # Output options
-    parser.add_argument('--plot',
-        action='store_true',
-        help='Plot results',
-        default=False
-    )
-
-    args = parser.parse_args()
-
     # Set random seed
-    np.random.seed(args.seed)
+    np.random.seed(SEED)
 
     # Load or generate instance
-    if args.instance:
-        print(f"Loading instance from {args.instance}")
-        instance = TSPInstance.from_tsplib(args.instance)
+    if INSTANCE:
+        print(f"Loading instance from {INSTANCE}")
+        instance = TSPInstance.from_tsplib(INSTANCE)
         if instance is None:
-            print(f"Failed to load instance from {args.instance}")
+            print(f"Failed to load instance from {INSTANCE}")
             return
         coords = None
-    elif args.random:
-        print(f"Generating random instance with {args.random} cities")
-        coords = np.random.rand(args.random, 2) * 100
+    elif RANDOM:
+        print(f"Generating random instance with {RANDOM} cities")
+        coords = np.random.rand(RANDOM, 2) * 100
         instance = TSPInstance.from_coordinates(
-            f"random_{args.random}",
+            f"random_{RANDOM}",
             coords
         )
     else:
@@ -234,18 +141,18 @@ def main():
     print(f"Cities: {instance.n_cities}")
 
     # Execute based on mode
-    if args.mode == 'gurobi':
+    if MODE == 'gurobi':
         print("\n" + "=" * 60)
         print("Solving with Gurobi")
         print("=" * 60)
         solution = solve_with_gurobi(
             instance,
-            time_limit=args.time_limit,
-            mip_gap=args.mip_gap,
-            threads=args.threads,
-            use_mtz=args.use_mtz,
-            use_callback=args.use_callback,
-            use_hyper_heuristic=args.use_hyper_heuristic
+            time_limit=TIME_LIMIT,
+            mip_gap=MIP_GAP,
+            threads=THREADS,
+            use_mtz=USE_MTZ,
+            use_callback=USE_CALLBACK,
+            use_hyper_heuristic=USE_HYPER_HEURISTIC
         )
 
         print("\nSolution:")
@@ -253,7 +160,7 @@ def main():
         print(f"Cost: {solution.cost:.2f}")
         print(f"Gap: {solution.gap * 100:.2f}%")
         print(f"Time: {solution.solve_time:.2f}s")
-        if args.plot and solution.tour:
+        if PLOT and solution.tour:
             coords_for_plot = coords if coords is not None else np.array([
                 [0, 0] for _ in range(instance.n_cities)
             ])
@@ -263,28 +170,28 @@ def main():
                 f"Gurobi Solution - {instance.name}"
             )
 
-    elif args.mode == 'qlearning':
+    elif MODE == 'qlearning':
         print("\n" + "=" * 60)
         print("Training Q-learning hyper-heuristic")
         print("=" * 60)
         if coords is None:
             print(
                 "Error: Q-learning requires coordinates. "
-                "Use --random to generate an instance."
+                "Set RANDOM in settings.py to generate an instance."
             )
             return
 
         agent, history, init_tour, best_tour = train_q_learning(
             coords,
-            episodes=args.episodes,
-            steps_per_episode=args.steps,
-            bound_mode=args.bound_mode,
-            early_stop_gap=args.early_stop_gap,
-            patience=args.patience,
-            seed=args.seed
+            episodes=EPISODES,
+            steps_per_episode=STEPS,
+            bound_mode=BOUND_MODE,
+            early_stop_gap=EARLY_STOP_GAP,
+            patience=PATIENCE,
+            seed=SEED
         )
 
-        if args.plot:
+        if PLOT:
             plot_tour(
                 coords.tolist(),
                 init_tour,
@@ -296,14 +203,14 @@ def main():
                 f"Final Tour - {instance.name}"
             )
 
-    elif args.mode == 'compare':
+    elif MODE == 'compare':
         print("\n" + "=" * 60)
         print("Comparing Gurobi and Q-learning")
         print("=" * 60)
         if coords is None:
             print(
                 "Error: Comparison requires coordinates. "
-                "Use --random to generate an instance."
+                "Set RANDOM in settings.py to generate an instance."
             )
             return
 
@@ -311,9 +218,9 @@ def main():
         print("\n--- Gurobi Solution ---")
         solution = solve_with_gurobi(
             instance,
-            time_limit=args.time_limit or 60,
-            mip_gap=args.mip_gap,
-            threads=args.threads
+            time_limit=TIME_LIMIT or 60,
+            mip_gap=MIP_GAP,
+            threads=THREADS
         )
         print(f"Gurobi cost: {solution.cost:.2f}")
 
@@ -321,10 +228,10 @@ def main():
         print("\n--- Q-learning Solution ---")
         agent, history, init_tour, best_tour = train_q_learning(
             coords,
-            episodes=args.episodes,
-            steps_per_episode=args.steps,
-            bound_mode=args.bound_mode,
-            seed=args.seed
+            episodes=EPISODES,
+            steps_per_episode=STEPS,
+            bound_mode=BOUND_MODE,
+            seed=SEED
         )
         coords_list = coords.tolist()
         q_cost = tour_length(best_tour, coords_list)
