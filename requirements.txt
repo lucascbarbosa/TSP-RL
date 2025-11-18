@@ -1,0 +1,6 @@
+gurobipy
+lkh
+matplotlib
+networkx
+numpy
+python-tsp
