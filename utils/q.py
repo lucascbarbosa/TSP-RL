@@ -1,10 +1,9 @@
 """Q-learning hyper-heuristic for TSP."""
 import os
 import math
-import random
 import tempfile
 import subprocess
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -47,15 +46,19 @@ def greedy_tour(coords: List[Tuple[float, float]]) -> List[int]:
 # -------------------------
 # Low-level heuristics
 # -------------------------
-def two_opt_best_improvement(tour: List[int], coords: List[Tuple[float, float]], max_checks=1000) -> List[int]:
+def two_opt_best_improvement(
+    tour: List[int],
+    coords: List[Tuple[float, float]],
+    max_checks: int = 1000
+) -> List[int]:
     """Apply 2-opt best improvement heuristic."""
     n = len(tour)
     best_delta = 0.0
     best_move = None
     checks = 0
     for _ in range(max_checks):
-        i = random.randrange(0, n - 1)
-        j = random.randrange(i + 1, n)
+        i = np.random.randint(0, n - 1)
+        j = np.random.randint(i + 1, n)
         if j == i + 1:
             continue
         a, b = coords[tour[i]], coords[tour[(i + 1) % n]]
@@ -72,14 +75,18 @@ def two_opt_best_improvement(tour: List[int], coords: List[Tuple[float, float]],
     return new_tour
 
 
-def swap_two_nodes(tour: List[int], coords: List[Tuple[float, float]], tries=50) -> List[int]:
+def swap_two_nodes(
+    tour: List[int],
+    coords: List[Tuple[float, float]],
+    tries: int = 50
+) -> List[int]:
     """Swap two nodes in the tour."""
     n = len(tour)
     best_delta = 0.0
     best = None
     base = tour_length(tour, coords)
     for _ in range(tries):
-        i, j = random.sample(range(n), 2)
+        i, j = np.random.choice(n, size=2, replace=False)
         if i > j:
             i, j = j, i
         new = tour[:]
@@ -94,14 +101,18 @@ def swap_two_nodes(tour: List[int], coords: List[Tuple[float, float]], tries=50)
     return best
 
 
-def relocate_one_node(tour: List[int], coords: List[Tuple[float, float]], tries=50) -> List[int]:
+def relocate_one_node(
+    tour: List[int],
+    coords: List[Tuple[float, float]],
+    tries: int = 50
+) -> List[int]:
     """Relocate one node to a different position."""
     n = len(tour)
     best_delta = 0.0
     best = None
     base = tour_length(tour, coords)
     for _ in range(tries):
-        i, j = random.sample(range(n), 2)
+        i, j = np.random.choice(n, size=2, replace=False)
         t = tour[:]
         city = t.pop(i)
         t.insert(j, city)
@@ -140,13 +151,15 @@ def mst_lower_bound(coords: List[Tuple[float, float]]) -> float:
 
 
 def one_tree_lower_bound(coords: List[Tuple[float, float]]) -> float:
-    """
-    Minimum 1-tree lower bound:
+    r"""Minimum 1-tree lower bound.
+
     For each possible root r:
       - compute MST on V\\{r}
       - add two smallest edges incident to r
-    Return min over r (this is a common 1-tree LB; Held-Karp improvement requires Lagrangian iteration).
-    Complexity: O(n * (m log n)) ~ O(n^2 log n) for dense graphs, OK for n up to a few hundreds.
+    Return min over r (this is a common 1-tree LB; Held-Karp improvement
+        requires Lagrangian iteration).
+    Complexity: O(n * (m log n)) ~ O(n^2 log n) for dense graphs, OK for n up
+        to a few hundreds.
     """
     n = len(coords)
     # Precompute pairwise distances
@@ -189,7 +202,7 @@ def write_tsplib(coords: List[Tuple[float, float]], fname: str):
     """Write a minimal TSPLIB .tsp file for Concorde / LKH input (EUC_2D)."""
     n = len(coords)
     with open(fname, "w") as f:
-        f.write(f"NAME: demo\n")
+        f.write("NAME: demo\n")
         f.write("TYPE: TSP\n")
         f.write(f"DIMENSION: {n}\n")
         f.write("EDGE_WEIGHT_TYPE: EUC_2D\n")
@@ -199,36 +212,38 @@ def write_tsplib(coords: List[Tuple[float, float]], fname: str):
         f.write("EOF\n")
 
 
-def run_concorde(coords: List[Tuple[float, float]], timeout_sec: int = 30) -> Optional[float]:
-    """
-    Try to run 'concorde' on a TSPLIB file and parse optimal tour length.
-    Returns optimal tour length if found; else None.
-    """
+def run_concorde(
+    coords: List[Tuple[float, float]],
+    timeout_sec: int = 30
+) -> Optional[float]:
+    """Try to run 'concorde' on a TSPLIB file and parse optimal tour length."""
     try:
         # write instance
         with tempfile.TemporaryDirectory() as tmpd:
             tspfile = os.path.join(tmpd, "inst.tsp")
             write_tsplib(coords, tspfile)
-            # call 'concorde' binary (if available) which prints output; we capture it
-            # set a timeout to avoid long runs
             cmd = ["concorde", tspfile]
             print("Calling Concorde:", " ".join(cmd))
-            p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_sec)
+            p = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout_sec
+            )
             out = p.stdout.decode() + "\n" + p.stderr.decode()
-            # Try to parse lines looking for "Optimal tour cost" or similar phrases
             for line in out.splitlines():
                 line = line.strip()
-                # Concorde output varies; try to find floats on lines
-                if "Optimal" in line and ("cost" in line.lower() or "tour" in line.lower()):
-                    # extract last number
-                    toks = [t for t in line.replace("=", " ").split() if any(ch.isdigit() for ch in t)]
+                if (
+                    "Optimal" in line and
+                    ("cost" in line.lower() or "tour" in line.lower())
+                ):
+                    toks = [
+                        t
+                        for t in line.replace("=", " ").split()
+                        if any(ch.isdigit() for ch in t)
+                    ]
                     if toks:
-                        try:
-                            val = float(toks[-1])
-                            return val
-                        except:
-                            pass
-            # If Concorde wrote a .sol or .tour file, we could parse; but this is best-effort
+                        return float(toks[-1])
             print("Concorde output (first 200 chars):", out[:200])
     except subprocess.TimeoutExpired:
         print("Concorde timed out.")
@@ -239,11 +254,12 @@ def run_concorde(coords: List[Tuple[float, float]], timeout_sec: int = 30) -> Op
     return None
 
 
-def run_lkh(coords: List[Tuple[float, float]], max_trials: int = 1, timeout_sec: int = 15) -> Optional[float]:
-    """
-    Run LKH (if available) to get a *tour cost* (upper bound). Not a lower bound.
-    Returns tour cost or None.
-    """
+def run_lkh(
+    coords: List[Tuple[float, float]],
+    max_trials: int = 1,
+    timeout_sec: int = 15
+) -> Optional[float]:
+    """Run LKH to get a *tour cost* (upper bound). Not a lower bound."""
     try:
         with tempfile.TemporaryDirectory() as tmpd:
             tspfile = os.path.join(tmpd, "inst.tsp")
@@ -255,9 +271,13 @@ def run_lkh(coords: List[Tuple[float, float]], max_trials: int = 1, timeout_sec:
                 f.write(f"MAX_TRIALS = {max_trials}\n")
             cmd = ["LKH", parfile]
             print("Calling LKH:", " ".join(cmd))
-            p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_sec)
+            p = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout_sec
+            )
             out = p.stdout.decode() + "\n" + p.stderr.decode()
-            # parse output for "Cost ="
             best = None
             for line in out.splitlines():
                 if "Cost" in line and "=" in line:
@@ -265,7 +285,7 @@ def run_lkh(coords: List[Tuple[float, float]], max_trials: int = 1, timeout_sec:
                         val = float(line.split("=")[-1].strip().split()[0])
                         best = val
                         break
-                    except:
+                    except (ValueError, IndexError):
                         pass
             if best is None:
                 print("LKH output (first 200 chars):", out[:200])
@@ -282,7 +302,11 @@ def run_lkh(coords: List[Tuple[float, float]], max_trials: int = 1, timeout_sec:
 # -------------------------
 # State abstraction and Q-learning agent
 # -------------------------
-def quality_bin(current_len, init_len, n_bins=6):
+def quality_bin(
+    current_len: float,
+    init_len: float,
+    n_bins: int = 6
+) -> int:
     """Bin the quality ratio into discrete states."""
     ratio = current_len / init_len
     capped = min(max(ratio, 0.9), 2.0)
@@ -290,7 +314,10 @@ def quality_bin(current_len, init_len, n_bins=6):
     return max(0, min(n_bins - 1, bin_idx))
 
 
-def improvement_bin(delta, thresholds=(-1e-6, -0.01)):
+def improvement_bin(
+    delta: float,
+    thresholds: Tuple[float, float] = (-1e-6, -0.01)
+) -> int:
     """Bin the improvement delta into discrete states."""
     if delta < thresholds[1]:
         return 2
@@ -300,7 +327,12 @@ def improvement_bin(delta, thresholds=(-1e-6, -0.01)):
         return 0
 
 
-def state_from(tour, coords, init_len, last_delta):
+def state_from(
+    tour: List[int],
+    coords: List[Tuple[float, float]],
+    init_len: float,
+    last_delta: float
+) -> Tuple[int, int]:
     """Extract state representation from current tour."""
     q = quality_bin(tour_length(tour, coords), init_len)
     ib = improvement_bin(last_delta)
@@ -327,7 +359,7 @@ class QLearningHH:
         self.eps = eps
         self.Q = np.zeros((self.nq, self.ni, self.na), dtype=float)
 
-    def choose(self, state):
+    def choose(self, state: Tuple[int, int]) -> int:
         """Choose an action using epsilon-greedy policy."""
         qbin, ibin = state
         if np.random.random() < self.eps:
@@ -337,13 +369,30 @@ class QLearningHH:
         choices = np.flatnonzero(np.isclose(vals, maxv))
         return int(np.random.choice(choices))
 
-    def update(self, state, action, reward, next_state):
+    def update(
+        self,
+        state: Tuple[int, int],
+        action: int,
+        reward: float,
+        next_state: Tuple[int, int]
+    ) -> None:
         """Update Q-value using Q-learning update rule."""
         q0 = self.Q[state[0], state[1], action]
         qmax_next = self.Q[next_state[0], next_state[1], :].max()
-        self.Q[state[0], state[1], action] = q0 + self.alpha * (reward + self.gamma * qmax_next - q0)
+        self.Q[state[0], state[1], action] = (
+            q0 +
+            self.alpha * (
+                reward +
+                self.gamma * qmax_next -
+                q0
+            )
+        )
 
-    def decay_epsilon(self, factor=0.995, min_eps=0.02):
+    def decay_epsilon(
+        self,
+        factor: float = 0.995,
+        min_eps: float = 0.02
+    ) -> None:
         """Decay exploration rate."""
         self.eps = max(min_eps, self.eps * factor)
 
@@ -352,7 +401,7 @@ class QLearningHH:
 # Training loop with early stopping based on chosen bound
 # -------------------------
 def train_qhh_with_early_stopping(
-    coords: List[Tuple[float, float]],
+    coords: np.ndarray,
     episodes: int = 400,
     steps_per_episode: int = 200,
     bound_mode: str = "mst",  # "mst", "1tree", "concorde"
@@ -363,7 +412,7 @@ def train_qhh_with_early_stopping(
     try_concorde_once: bool = True
 ):
     """Trains Q-learning HH and uses selected dual bound for early stopping."""
-    rnd = random.Random(seed)
+    rng = np.random.default_rng(seed)
     n = len(coords)
     init_tour = greedy_tour(coords)
     init_len = tour_length(init_tour, coords)
@@ -385,7 +434,11 @@ def train_qhh_with_early_stopping(
             return one_tree_lower_bound(coords)
         elif mode == "concorde":
             lb_concorde = run_concorde(coords, timeout_sec=60)
-            return lb_concorde if lb_concorde is not None else mst_lower_bound(coords)
+            return (
+                lb_concorde
+                if lb_concorde is not None
+                else mst_lower_bound(coords)
+            )
         else:
             return mst_lower_bound(coords)
 
@@ -398,7 +451,7 @@ def train_qhh_with_early_stopping(
         # initialize tour randomly by shuffling greedy slightly
         tour = init_tour[:]
         for _ in range(5):
-            i, j = rnd.sample(range(n), 2)
+            i, j = rng.choice(n, size=2, replace=False)
             tour[i], tour[j] = tour[j], tour[i]
         last_delta = 0.0
         total_reward = 0.0
@@ -430,21 +483,35 @@ def train_qhh_with_early_stopping(
             no_improve += 1
 
         if verbose and (ep % max(1, episodes // 10) == 0):
-            print(f"Episode {ep + 1}/{episodes}, total_reward={total_reward:.6f}, "
-                  f"eps={agent.eps:.4f}, tour_len={tour_cost:.3f}, gap={gap * 100:.4f}%")
-        # early stop: gap below threshold and no improvement for patience episodes
+            print(
+                f"Episode {ep + 1}/{episodes}, "
+                f"total_reward={total_reward:.6f}, "
+                f"eps={agent.eps:.4f}, "
+                f"tour_len={tour_cost:.3f}, "
+                f"gap={gap * 100:.4f}%"
+            )
         if gap < early_stop_gap and no_improve >= patience:
             if verbose:
-                print(f"Early stopping at episode {ep + 1}: tour_cost={tour_cost:.2f}, "
-                      f"LB={LB:.2f}, gap={gap * 100:.4f}%")
+                print(
+                    f"Early stopping at episode {ep + 1}: "
+                    f"tour_cost={tour_cost:.2f}, "
+                    f"LB={LB:.2f}, "
+                    f"gap={gap * 100:.4f}%"
+                )
             break
 
     return agent, history, init_len, init_tour, tour, LB
 
 
-def evaluate_agent(agent: QLearningHH, coords, episodes=20, steps_per_episode=200, seed=None):
+def evaluate_agent(
+    agent: QLearningHH,
+    coords: np.ndarray,
+    episodes: int = 20,
+    steps_per_episode: int = 200,
+    seed: Optional[int] = None
+) -> Tuple[np.ndarray, float, List[int]]:
     """Evaluate a trained agent."""
-    rnd = random.Random(seed)
+    rng = np.random.default_rng(seed)
     n = len(coords)
     init_tour = greedy_tour(coords)
     init_len = tour_length(init_tour, coords)
@@ -452,7 +519,7 @@ def evaluate_agent(agent: QLearningHH, coords, episodes=20, steps_per_episode=20
     for ep in range(episodes):
         tour = init_tour[:]
         for _ in range(5):
-            i, j = rnd.sample(range(n), 2)
+            i, j = rng.choice(n, size=2, replace=False)
             tour[i], tour[j] = tour[j], tour[i]
         for step in range(steps_per_episode):
             state = state_from(tour, coords, init_len, 0.0)
@@ -464,13 +531,13 @@ def evaluate_agent(agent: QLearningHH, coords, episodes=20, steps_per_episode=20
     return np.array(results), init_len, init_tour
 
 
-def plot_tour(coords, tour, title="TSP Tour"):
-    """
-    Plots a TSP tour.
-    coords : array (n,2) of city coordinates
-    tour   : list of node indices representing order of visitation
-    """
-    tour = np.array(tour + [tour[0]])  # close the cycle
+def plot_tour(
+    coords: np.ndarray,
+    tour: List[int],
+    title: str = "TSP Tour"
+) -> None:
+    """Plots a TSP tour."""
+    tour = np.array(tour + [tour[0]])
     xs = [coords[i][0] for i in tour]
     ys = [coords[i][1] for i in tour]
 
@@ -484,23 +551,40 @@ def plot_tour(coords, tour, title="TSP Tour"):
     plt.show()
 
 
-def demo_compare_bounds(coords, seed=123, episodes=250, steps_per_episode=150, 
-                        early_stop_gap=0.01, patience=35, check_externals=True):
+def demo_compare_bounds(
+    coords: np.ndarray,
+    seed: int = 123,
+    episodes: int = 250,
+    steps_per_episode: int = 150,
+    early_stop_gap: float = 0.01,
+    patience: int = 35,
+    check_externals: bool = True
+) -> dict[str, Any]:
     """Demo function to compare different bound modes."""
     bound_modes = ["mst", "1tree"]
-    
+
     if check_externals:
         try:
             run_concorde(coords, timeout_sec=5)  # Quick check
             bound_modes.append("concorde")
-        except:
-            print("Concorde not available; skipping concorde run (will still record MST/1-tree).")
+        except Exception:
+            print(
+                "Concorde not available; "
+                "skipping concorde run (will still record MST/1-tree)."
+            )
 
     results = {}
     for mode in bound_modes:
         print("\n" + "=" * 60)
         print(f"Training using bound mode = {mode}")
-        agent, history, init_len, init_tour, best_tour, lb = train_qhh_with_early_stopping(
+        (
+            agent,
+            history,
+            init_len,
+            init_tour,
+            best_tour,
+            lb
+        ) = train_qhh_with_early_stopping(
             coords,
             episodes=episodes,
             steps_per_episode=steps_per_episode,
@@ -513,8 +597,17 @@ def demo_compare_bounds(coords, seed=123, episodes=250, steps_per_episode=150,
         )
         plot_tour(coords, init_tour, "Tour inicial")
         plot_tour(coords, best_tour, "Tour final")
-        eval_res, base_len, base_tour = evaluate_agent(agent, coords, episodes=30, 
-                                                       steps_per_episode=200, seed=seed)
+        (
+            eval_res,
+            base_len,
+            base_tour
+        ) = evaluate_agent(
+            agent,
+            coords,
+            episodes=30,
+            steps_per_episode=200,
+            seed=seed
+        )
         results[mode] = {
             "agent": agent,
             "history": history,
@@ -522,9 +615,13 @@ def demo_compare_bounds(coords, seed=123, episodes=250, steps_per_episode=150,
             "base_len": base_len,
             "lb": lb
         }
-        print(f"Mode {mode} finished: base_len={base_len:.3f}, eval_mean={eval_res.mean():.3f}, "
-              f"best={eval_res.min():.3f}")
-    
+        print(
+            f"Mode {mode} finished: "
+            f"base_len={base_len:.3f}, "
+            f"eval_mean={eval_res.mean():.3f}, "
+            f"best={eval_res.min():.3f}"
+        )
+
     # Summarize
     print("\n" + "=" * 60)
     print("Summary of bounds and evaluation (None = not run / unavailable):")
@@ -535,6 +632,8 @@ def demo_compare_bounds(coords, seed=123, episodes=250, steps_per_episode=150,
             continue
         eval_res = r["eval_results"]
         print(f"{mode}: Lower Bound={r['lb']:.2f}")
-        print(f"   eval mean={eval_res.mean():.3f}, std={eval_res.std():.3f}, "
-              f"best={eval_res.min():.3f}")
+        print(
+            f"eval_mean={eval_res.mean():.3f}, "
+            f"std={eval_res.std():.3f}, "
+            f"best={eval_res.min():.3f}")
     return results
