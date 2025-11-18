@@ -1,12 +1,12 @@
 """Q-learning hyper-heuristic for TSP."""
-import os
 import math
-import tempfile
-import subprocess
-from typing import List, Tuple, Optional, Any
-import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
+import os
+import subprocess
+import tempfile
+from typing import List, Tuple, Optional, Any
 
 
 # -------------------------
