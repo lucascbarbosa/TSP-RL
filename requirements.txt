@@ -3,4 +3,6 @@ lkh
 matplotlib
 networkx
 numpy
+pandas
 python-tsp
+torch
