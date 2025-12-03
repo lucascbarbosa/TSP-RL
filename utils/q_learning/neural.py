@@ -133,12 +133,12 @@ class DQN(nn.Module):
 
 def deep_q_learning(
     transition_filename: str,
-    hidden_dims: list = [64, 64],
+    hidden_dims: list = [128, 128],
     learning_rate: float = 0.001,
-    gamma: float = 0.9,
-    batch_size: int = 32,
-    num_epochs: int = 10,
-) -> Tuple[DQN, Dict[str, list]]:
+    gamma: float = 0.99,
+    batch_size: int = 64,
+    num_epochs: int = 100,
+) -> Tuple[QTable, Dict[str, list]]:
     """Train Deep Q-Network (DQN) from transition matrix."""
     # Load transition data
     (
@@ -232,14 +232,13 @@ def deep_q_learning(
             f"Avg Q={avg_q:.6f}, "
             f"Avg Reward={avg_reward:.6f}, "
         )
-    return model, history
+    return model.to_q_table(), history
 
 
 if __name__ == "__main__":
     for i in range(10):
         filename = f"data/transitions/instance_{i + 1:02d}.txt"
-        model, history = deep_q_learning(filename)
+        q_table, history = deep_q_learning(filename)
         plot_path = f"data/plots/neural/instance_{i + 1:02d}.png"
         plot_history(history, plot_path)
-        q_table = model.to_q_table()
         q_table.to_txt(f"data/q_tables/neural/instance_{i + 1:02d}.txt")

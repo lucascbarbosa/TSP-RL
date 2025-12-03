@@ -63,9 +63,11 @@ def build_mdp_model(transition_filename: str):
 
     # Normalize by visit count
     visits_mask = visit_count > 0
+    visit_count_expanded = visit_count.unsqueeze(-1)
+    visits_mask_expanded = visits_mask.unsqueeze(-1)
     transition_matrix = torch.where(
-        visit_count > 0,
-        transition_matrix / visit_count,
+        visits_mask_expanded,
+        transition_matrix / visit_count_expanded,
         torch.zeros_like(transition_matrix)
     )
     reward_matrix = torch.where(

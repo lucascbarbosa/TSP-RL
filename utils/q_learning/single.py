@@ -1,81 +1,86 @@
 """Basic Q-Learning implementation."""
 import torch
 from utils.q_learning.table import QTable
-from utils.transition import load_transition_file
+from utils.mdp import build_mdp_model
+from typing import Tuple, Dict
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def single_q_learning(
     transition_filename: str,
-    alpha: float = 0.1,
-    gamma: float = 0.9,
-    epsilon: float = 0.1,
-    max_iter: int = 100,
-) -> QTable:
-    """Train Q-table from transition matrix using Q-Learning."""
-    # Load transition data
-    (
-        current_states,
-        actions,
-        rewards,
-        next_states,
-        n_states,
-        n_actions,
-    ) = load_transition_file(transition_filename, return_torch=True)
+    gamma: float = 0.99,
+    max_iter: int = 1000,
+    tol: float = 1e-6,
+) -> Tuple[QTable, Dict[str, list]]:
+    """Train Q-table from MDP using Q-Learning.
 
-    # Convert to appropriate dtypes
-    current_states = current_states.to(torch.int32)
-    actions = actions.to(torch.int32)
-    rewards = rewards.to(torch.float32)
-    next_states = next_states.to(torch.int32)
+    Returns:
+        Tuple of (QTable, history) where history contains 'avg_q_value' list
+    """
+    # Build MDP from transition data
+    mdp = build_mdp_model(transition_filename)
+    n_states = mdp.n_states
+    n_actions = mdp.n_actions
 
-    # Initialize Q-table as numpy array
-    q_table = QTable(
+    # Get MDP matrices
+    P = mdp.transition_matrix  # (n_states, n_actions, n_states)
+    R = mdp.reward_matrix  # (n_states, n_actions)
+
+    # Training history
+    history = {'avg_q_value': []}
+
+    q_current = QTable(
         n_states=n_states,
         n_actions=n_actions,
-        epsilon=epsilon,
     )
-
     for i in range(max_iter):
-        # Shuffle transitions for each iteration
-        indices = torch.randperm(len(current_states))
+        q_new = QTable(
+            n_states=n_states,
+            n_actions=n_actions,
+        )
 
-        # Reset epsilon
-        q_table.reset_epsilon()
+        # Vectorized computation
+        # Q'(s, a)  = R(s,a) + gamma * E[max_{a'}Q(s',a')]
+        max_q_values = q_current.table.max(dim=1)[0]
+        expected_values = torch.einsum('san,n->sa', P, max_q_values)
+        q_new.table = R + gamma * expected_values
 
-        for idx in indices:
-            # Get state, action, reward, next state
-            state = int(current_states[idx])
-            action = int(actions[idx])
-            reward = rewards[idx]
-            next_state = int(next_states[idx])
+        # Track average Q value
+        avg_q = q_current.table.mean().item()
+        history['avg_q_value'].append(avg_q)
 
-            # Update Q-table using Q-Learning
-            q_table.table[state, action] += (
-                alpha * (
-                    reward +
-                    gamma * q_table.table[next_state].max(dim=0)[0] -
-                    q_table.table[state, action]
-                )
-            )
+        if (q_current.table - q_new.table).abs().max() < tol:
+            break
 
-            # Decay epsilon
-            q_table.decay_epsilon()
-
+        q_current = q_new.copy()
         if i % 10 == 0:
             print(
                 f"Iter [{i + 1}/{max_iter}]: "
-                f"Avg Q-value: {q_table.table.mean().item():.4f}"
+                f"Avg Q-value: {avg_q:.4f}"
             )
 
-    return q_table
+    return q_current, history
 
 
 if __name__ == "__main__":
-    for i in range(100):
-        q_table = single_q_learning(
+    from utils.plot import plot_single_q_learning
+
+    for i in range(70):
+        q_table, history = single_q_learning(
             f"data/transitions/instance_{i + 1:02d}.txt",
-            alpha=0.2,
+            max_iter=5000,
         )
         q_table.to_txt(f"data/q_tables/single/instance_{i + 1:02d}.txt")
+        plot_path = f"data/plots/single/instance_{i + 1:02d}.png"
+        plot_single_q_learning(history, plot_path)
+
+    for i in range(70, 100):
+        history = q_table.rollout(
+            f"data/transitions/instance_{i + 1:02d}.txt",
+            n_simulations=100,
+            initial_state=0,
+            max_steps=1000,
+        )
+        plot_path = f"data/plots/single/instance_{i + 1:02d}.png"
+        plot_single_q_learning(history, plot_path)

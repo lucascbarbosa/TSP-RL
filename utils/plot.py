@@ -43,6 +43,77 @@ def plot_history(
         plt.show()
 
 
+def plot_single_q_learning(
+    history: Dict[str, list],
+    save_path: Optional[str] = None
+) -> None:
+    """Plot single Q-Learning training history.
+
+    Args:
+        history: Dictionary containing 'avg_q_value' list
+        save_path: Optional path to save the plot. If None, display the plot.
+    """
+    iterations = range(1, len(history['avg_q_value']) + 1)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(
+        iterations, history['avg_q_value'], 'b-',
+        label='Avg Q-Value', linewidth=2
+    )
+    plt.xlabel('Iteration', fontsize=12)
+    plt.ylabel('Average Q-Value', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=11)
+    plt.xlim(left=0)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
+def plot_double_q_learning(
+    history: Dict[str, list],
+    save_path: Optional[str] = None
+) -> None:
+    """Plot double Q-Learning training history.
+
+    Args:
+        history: Dictionary containing 'avg_q_value_q1' and
+            'avg_q_value_q2' lists
+        save_path: Optional path to save the plot. If None, display the plot.
+    """
+    iterations = range(1, len(history['avg_q_value_q1']) + 1)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(
+        iterations, history['avg_q_value_q1'], 'b-',
+        label='Avg Q-Value Q1', linewidth=2
+    )
+    plt.plot(
+        iterations, history['avg_q_value_q2'], 'r-',
+        label='Avg Q-Value Q2', linewidth=2
+    )
+    plt.xlabel('Iteration', fontsize=12)
+    plt.ylabel('Average Q-Value', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=11)
+    plt.xlim(left=0)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+
 def plot_tour(
     coords: np.ndarray,
     tour: List[int],
