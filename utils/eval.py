@@ -7,7 +7,72 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import time
+import numpy as np
+from collections import defaultdict
 
+# ===========================================================
+# 0. Metrics
+# ===========================================================
+
+def init_metrics():
+    return defaultdict(lambda: {
+        "episode_rewards": [],
+        "episode_lengths": [],
+        "q_tables": []
+    })
+
+def record_metrics(metrics, algo_name, rewards, lengths, qtable):
+    m = metrics[algo_name]
+    m["episode_rewards"].append(rewards)
+    m["episode_lengths"].append(lengths)
+    m["q_tables"].append(np.copy(qtable))
+
+
+def smooth_curve(values, window=10):
+    if len(values) < window:
+        return values
+    return np.convolve(values, np.ones(window)/window, mode="valid")
+
+
+def plot_learning_curves(metrics, title="Learning Curves"):
+    plt.figure(figsize=(12,5))
+
+    for algo, data in metrics.items():
+        # average across runs
+        runs = np.array(data["episode_rewards"], dtype=object)
+        max_len = max(len(x) for x in runs)
+        aligned = np.zeros((len(runs), max_len))
+        aligned[:] = np.nan
+        for i, r in enumerate(runs):
+            aligned[i, :len(r)] = r
+
+        mean_rewards = np.nanmean(aligned, axis=0)
+        smoothed = smooth_curve(mean_rewards, window=10)
+        plt.plot(smoothed, label=f"{algo}")
+
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.title(title)
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_final_performance(metrics, title="Final Performance"):
+    algos = []
+    values = []
+
+    for algo, data in metrics.items():
+        # final reward of each run
+        final_rewards = [r[-1] for r in data["episode_rewards"]]
+        algos.append(algo)
+        values.append(np.mean(final_rewards))
+
+    plt.figure(figsize=(8,5))
+    plt.bar(algos, values)
+    plt.ylabel("Final Average Reward")
+    plt.title(title)
+    plt.grid(axis="y")
+    plt.show()
 
 # ===========================================================
 # 1. LOAD TRANSITION DATASET
@@ -192,7 +257,7 @@ def rollout(policy, P, R, start_state=0, max_steps=100):
     s = start_state
     total_reward = 0
 
-    for _ in range(max_steps):
+    for length in range(max_steps):
         a = policy[s]
         s2 = np.random.choice(len(P), p=P[s, a])
         total_reward += R[s, a]
@@ -200,13 +265,13 @@ def rollout(policy, P, R, start_state=0, max_steps=100):
             break
         s = s2
 
-    return total_reward
+    return total_reward, length
 
 
 # ===========================================================
 # 8. FULL PIPELINE FOR A SINGLE DATASET
 # ===========================================================
-def evaluate_one(path):
+def evaluate_one(metrics, path):
     print(f"\n=== Evaluating {path} ===")
 
     transitions, S, A = load_transition_file(path)
@@ -225,9 +290,16 @@ def evaluate_one(path):
     pi_n = extract_policy(Q_dqn)
 
     # Evaluate
-    rew_v = np.mean([rollout(pi_v, P, R) for _ in range(200)])
-    rew_d = np.mean([rollout(pi_d, P, R) for _ in range(200)])
-    rew_n = np.mean([rollout(pi_n, P, R) for _ in range(200)])
+    result_v, len_v = zip(*[rollout(pi_v, P, R) for _ in range(200)])
+    result_d, len_d = zip(*[rollout(pi_d, P, R) for _ in range(200)])
+    result_n, len_n = zip(*[rollout(pi_n, P, R) for _ in range(200)])
+    rew_v = np.mean(result_v)
+    rew_d = np.mean(result_d)
+    rew_n = np.mean(result_n)
+
+    record_metrics(metrics, "q_learning", result_v, len_v, Q_vanilla)
+    record_metrics(metrics, "double", result_d, len_d, Q_double)
+    record_metrics(metrics, "DQN", result_n, len_n, Q_dqn)
 
     print("Average return (vanilla):", rew_v)
     print("Average return (double): ", rew_d)
@@ -246,7 +318,7 @@ def evaluate_one(path):
 # ===========================================================
 # 9. BATCH EVALUATION FOR ALL DATASETS
 # ===========================================================
-def evaluate_all(root="datasets"):
+def evaluate_all(metrics, root="datasets"):
     results = {}
 
     for sub in ["frozenlake", "taxi", "random"]:
@@ -257,7 +329,7 @@ def evaluate_all(root="datasets"):
         for fname in os.listdir(folder):
             if fname.endswith(".txt"):
                 path = os.path.join(folder, fname)
-                results[f"{sub}/{fname}"] = evaluate_one(path)
+                results[f"{sub}/{fname}"] = evaluate_one(metrics, path)
 
     return results
 
@@ -266,9 +338,12 @@ def evaluate_all(root="datasets"):
 # RUN
 # ===========================================================
 if __name__ == "__main__":
+    metrics = init_metrics()
     start = time.time()
-    results = evaluate_all()
+    #results = evaluate_all(metrics)
+    evaluate_one(metrics, "datasets/frozenlake/frozenlake_0.txt")
+    plot_learning_curves(metrics)
+    plot_final_performance(metrics)
     end = time.time()
     print(end - start)
     print("\n=== Completed evaluation ===")
-    print(results)
