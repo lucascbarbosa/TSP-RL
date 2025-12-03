@@ -1,8 +1,11 @@
 """Double Q-Learning implementation."""
+import random
 import torch
-from utils.q_learning.table import QTable
-from utils.mdp import build_mdp_model
+from pathlib import Path
 from typing import Tuple, Dict
+from utils.mdp import build_mdp_model
+from utils.plot import plot_double_q_learning, plot_rollout
+from utils.q_learning.table import QTable
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -12,6 +15,8 @@ def double_q_learning(
     gamma: float = 0.99,
     max_iter: int = 100,
     tol: float = 1e-6,
+    q_table_1: QTable | None = None,
+    q_table_2: QTable | None = None,
 ) -> Tuple[QTable, QTable, Dict[str, list]]:
     """Train Q-table from MDP using Double Q-Learning.
 
@@ -25,14 +30,20 @@ def double_q_learning(
     n_actions = mdp.n_actions
 
     # Initialize Q-tables
-    q_current_1 = QTable(
-        n_states=n_states,
-        n_actions=n_actions,
-    )
-    q_current_2 = QTable(
-        n_states=n_states,
-        n_actions=n_actions,
-    )
+    if q_table_1 is None:
+        q_current_1 = QTable(
+            n_states=n_states,
+            n_actions=n_actions,
+        )
+    else:
+        q_current_1 = q_table_1.copy()
+    if q_table_2 is None:
+        q_current_2 = QTable(
+            n_states=n_states,
+            n_actions=n_actions,
+        )
+    else:
+        q_current_2 = q_table_2.copy()
 
     # Get MDP matrices
     P = mdp.transition_matrix  # (n_states, n_actions, n_states)
@@ -80,7 +91,7 @@ def double_q_learning(
         q_current_1 = q_new_1.copy()
         q_current_2 = q_new_2.copy()
 
-        if i % 10 == 0:
+        if i % 100 == 0:
             print(
                 f"Iter [{i + 1}/{max_iter}]: "
                 f"Avg Q-value Q1: {avg_q1:.4f}, "
@@ -91,16 +102,69 @@ def double_q_learning(
 
 
 if __name__ == "__main__":
-    from utils.plot import plot_double_q_learning
+    import shutil
 
-    for i in range(100):
+    # Clear previous results
+    plots_dir = Path("data/plots/double")
+    q_tables_dir = Path("data/q_tables/double")
+    if plots_dir.exists():
+        shutil.rmtree(plots_dir)
+        plots_dir.mkdir(parents=True, exist_ok=True)
+    if q_tables_dir.exists():
+        shutil.rmtree(q_tables_dir)
+        q_tables_dir.mkdir(parents=True, exist_ok=True)
+
+    # Configuration
+    eval_ratio = 0.3  # 30% for evaluation, 70% for training
+    transitions_dir = Path("data/transitions")
+
+    # List all available instance files
+    all_files = sorted(transitions_dir.glob("instance_*.txt"))
+    all_instances = []
+    for file in all_files:
+        # Extract instance number from filename
+        try:
+            instance_num = int(file.stem.split("_")[1])
+            all_instances.append(instance_num)
+        except (ValueError, IndexError):
+            continue
+
+    # Split instances based on eval_ratio
+    random.shuffle(all_instances)
+    n_eval = int(len(all_instances) * eval_ratio)
+    eval_instances = sorted(all_instances[:n_eval])
+    train_instances = sorted(all_instances[n_eval:])
+
+    # Train on training instances
+    print(f"Training on {len(train_instances)} instances")
+    q_table_1 = None
+    q_table_2 = None
+    for i, instance_idx in enumerate(train_instances):
+        print(f"==== Instance {instance_idx:02d} ====")
         q_table_1, q_table_2, history = double_q_learning(
-            f"data/transitions/instance_{i + 1:02d}.txt",
+            f"data/transitions/instance_{instance_idx:02d}.txt",
             max_iter=5000,
+            q_table_1=q_table_1,
+            q_table_2=q_table_2,
         )
         q_table_1.to_txt(
-            f"data/q_tables/double/instance_{i + 1:02d}_q_table_1.txt")
+            f"data/q_tables/double/instance_{instance_idx:02d}_q_table_1.txt"
+        )
         q_table_2.to_txt(
-            f"data/q_tables/double/instance_{i + 1:02d}_q_table_2.txt")
-        plot_path = f"data/plots/double/instance_{i + 1:02d}.png"
+            f"data/q_tables/double/instance_{instance_idx:02d}_q_table_2.txt"
+        )
+        plot_path = f"data/plots/double/instance_{instance_idx:02d}_train.png"
         plot_double_q_learning(history, plot_path)
+
+    # Evaluate with rollout on eval instances using Q1
+    print(f"Evaluating on {len(eval_instances)} instances")
+    for i, instance_idx in enumerate(eval_instances):
+        print(f"==== Instance {instance_idx:02d} ====")
+        rollout_history = q_table_1.rollout(
+            f"data/transitions/instance_{instance_idx:02d}.txt",
+            n_simulations=100,
+            initial_state=0,
+            max_steps=1000,
+        )
+        plot_path = f"data/plots/double/instance_{instance_idx:02d}_eval.png"
+        plot_rollout(rollout_history, plot_path)

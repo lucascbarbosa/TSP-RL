@@ -1,11 +1,13 @@
 """Q-Learning and Deep Q-Learning implementations for transition matrices."""
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Tuple
-from utils.plot import plot_history
+from utils.plot import plot_history, plot_rollout
 from utils.q_learning.table import QTable
 from utils.transition import load_transition_file
 
@@ -236,9 +238,63 @@ def deep_q_learning(
 
 
 if __name__ == "__main__":
-    for i in range(10):
-        filename = f"data/transitions/instance_{i + 1:02d}.txt"
-        q_table, history = deep_q_learning(filename)
-        plot_path = f"data/plots/neural/instance_{i + 1:02d}.png"
+    import shutil
+
+    # Clear previous results
+    plots_dir = Path("data/plots/neural")
+    q_tables_dir = Path("data/q_tables/neural")
+    if plots_dir.exists():
+        shutil.rmtree(plots_dir)
+        plots_dir.mkdir(parents=True, exist_ok=True)
+    if q_tables_dir.exists():
+        shutil.rmtree(q_tables_dir)
+        q_tables_dir.mkdir(parents=True, exist_ok=True)
+
+    # Configuration
+    eval_ratio = 0.3  # 30% for evaluation, 70% for training
+    transitions_dir = Path("data/transitions")
+
+    # List all available instance files
+    all_files = sorted(transitions_dir.glob("instance_*.txt"))
+    all_instances = []
+    for file in all_files:
+        # Extract instance number from filename
+        try:
+            instance_num = int(file.stem.split("_")[1])
+            all_instances.append(instance_num)
+        except (ValueError, IndexError):
+            continue
+
+    # Split instances based on eval_ratio
+    random.shuffle(all_instances)
+    n_eval = int(len(all_instances) * eval_ratio)
+    eval_instances = sorted(all_instances[:n_eval])
+    train_instances = sorted(all_instances[n_eval:])
+
+    # Train on training instances
+    print(f"Training on {len(train_instances)} instances")
+    q_table = None
+    for i, instance_idx in enumerate(train_instances):
+        print(f"==== Instance {instance_idx:02d} ====")
+        q_table, history = deep_q_learning(
+            f"data/transitions/instance_{instance_idx:02d}.txt",
+            num_epochs=5000,
+        )
+        q_table.to_txt(
+            f"data/q_tables/neural/instance_{instance_idx:02d}.txt"
+        )
+        plot_path = f"data/plots/neural/instance_{instance_idx:02d}_train.png"
         plot_history(history, plot_path)
-        q_table.to_txt(f"data/q_tables/neural/instance_{i + 1:02d}.txt")
+
+    # Evaluate with rollout on eval instances
+    print(f"Evaluating on {len(eval_instances)} instances")
+    for i, instance_idx in enumerate(eval_instances):
+        print(f"==== Instance {instance_idx:02d} ====")
+        rollout_history = q_table.rollout(
+            f"data/transitions/instance_{instance_idx:02d}.txt",
+            n_simulations=100,
+            initial_state=0,
+            max_steps=1000,
+        )
+        plot_path = f"data/plots/neural/instance_{instance_idx:02d}_eval.png"
+        plot_rollout(rollout_history, plot_path)
