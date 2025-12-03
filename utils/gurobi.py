@@ -53,7 +53,12 @@ def subtour_callback(model, where):
         for tour in subtours:
             if len(tour) < n:
                 model.cbLazy(
-                    gp.quicksum(model._x[i, j] for i in tour for j in tour if i != j)
+                    gp.quicksum(
+                        model._x[i, j]
+                        for i in tour
+                        for j in tour
+                        if i != j
+                    )
                     <= len(tour) - 1
                 )
 
@@ -103,7 +108,10 @@ def heuristic_greedy(dist: list[list[float]]) -> list[int]:
     return tour
 
 
-def heuristic_two_opt(dist: list[list[float]], base_tour: list[int]) -> list[int]:
+def heuristic_two_opt(
+    dist: list[list[float]],
+    base_tour: list[int]
+) -> list[int]:
     """One pass of 2-opt improvement over a given tour."""
     n = len(dist)
     best_tour = base_tour[:]
@@ -204,6 +212,7 @@ def hyper_callback(model, where):
 class GurobiTSPSolver:
     """Solves TSP using Gurobi."""
     def __init__(self, config: SolverConfig = None):
+        """."""
         self.config = config or SolverConfig()
 
     def solve(self, instance: TSPInstance) -> Solution:
@@ -218,7 +227,6 @@ class GurobiTSPSolver:
             "WLSSECRET": WLSSECRET,
             "LICENSEID": int(LICENSEID)
         }
-        print(params)
         env = gp.Env(params=params)
         model = gp.Model("TSP", env=env)
         self.config.apply_to_model(model)
@@ -228,7 +236,12 @@ class GurobiTSPSolver:
 
         # Objective: minimize total distance
         model.setObjective(
-            gp.quicksum(dist[i, j] * x[i, j] for i in range(n) for j in range(n) if i != j),
+            gp.quicksum(
+                dist[i, j] * x[i, j]
+                for i in range(n)
+                for j in range(n)
+                if i != j
+            ),
             GRB.MINIMIZE
         )
 
@@ -267,7 +280,9 @@ class GurobiTSPSolver:
                 cost=model.objVal,
                 solve_time=solve_time,
                 gap=gap,
-                status="optimal" if model.status == GRB.OPTIMAL else "time_limit"
+                status="optimal"
+                if model.status == GRB.OPTIMAL
+                else "time_limit"
             )
         else:
             return Solution(
@@ -279,7 +294,7 @@ class GurobiTSPSolver:
             )
 
     def _extract_tour(self, x, n):
-        """Extract tour from solution"""
+        """Extract tour from solution."""
         tour = [0]
         current = 0
 
@@ -291,4 +306,3 @@ class GurobiTSPSolver:
                     break
 
         return tour
-

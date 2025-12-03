@@ -7,12 +7,14 @@ from utils.gurobi import (
     subtour_callback,
     hyper_callback,
 )
-from utils.q import (
+"""
+from utils.q_learning import (
     evaluate_agent,
     plot_tour,
     tour_length,
     train_qhh_with_early_stopping,
 )
+"""
 from utils.settings import (
     MODE,
     INSTANCE,
