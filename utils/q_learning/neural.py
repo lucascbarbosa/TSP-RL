@@ -51,7 +51,7 @@ class DQN(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        hidden_dims: list = [128, 128],
+        hidden_dims: list = [64, 64],
         activation: str = 'relu'
     ):
         """Initialize DQN.
@@ -148,7 +148,6 @@ def plot_history(history: Dict[str, list], save_path: str = None) -> None:
     ax1.set_xlabel('Epoch', fontsize=12)
     ax1.set_ylabel('Loss', fontsize=12)
     ax1.grid(True, alpha=0.3)
-    ax1.legend()
     ax1.set_xlim(left=0)
 
     # Plot average Q-value
@@ -158,9 +157,8 @@ def plot_history(history: Dict[str, list], save_path: str = None) -> None:
     ax2.set_xlabel('Epoch', fontsize=12)
     ax2.set_ylabel('Average Q-Value', fontsize=12)
     ax2.grid(True, alpha=0.3)
-    ax2.legend()
     ax2.set_xlim(left=0)
-
+    
     plt.tight_layout()
 
     if save_path:
@@ -272,7 +270,6 @@ def deep_q_learning(
             f"Epoch {epoch + 1}/{num_epochs}: "
             f"Loss={avg_loss:.6f}, Avg Q={avg_q:.6f}"
         )
-
     return model, history
 
 
