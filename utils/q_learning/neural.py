@@ -158,7 +158,7 @@ def plot_history(history: Dict[str, list], save_path: str = None) -> None:
     ax2.set_ylabel('Average Q-Value', fontsize=12)
     ax2.grid(True, alpha=0.3)
     ax2.set_xlim(left=0)
-    
+
     plt.tight_layout()
 
     if save_path:
