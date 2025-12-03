@@ -1,5 +1,8 @@
 """Q Table class."""
 import numpy as np
+import torch
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class QTable:
@@ -11,15 +14,17 @@ class QTable:
         epsilon: float = 0.1,
     ):
         """Initialize Q-Table parameters."""
-        self.table: np.ndarray = np.zeros(
+        self.table: torch.Tensor = torch.zeros(
             (n_states, n_actions),
-            dtype=np.float32
+            dtype=torch.float32,
+            device=device
         )
         self.n_states = n_states
         self.n_actions = n_actions
         self.epsilon = epsilon
+        self.init_epsilon = epsilon
 
-    def get_policy(self, state: int) -> np.ndarray:
+    def get_policy(self, state: int) -> torch.Tensor:
         """Get action probabilities for a state (epsilon-greedy policy).
 
         Returns:
@@ -32,7 +37,7 @@ class QTable:
         prob_greedy = (1 - self.epsilon) / self.n_actions
         prob_explore = self.epsilon / self.n_actions
 
-        policy = np.zeros((self.n_actions))
+        policy = torch.zeros((self.n_actions), device=device)
         policy[self.table == best_actions] = prob_greedy + prob_explore
         policy[self.table != best_actions] = prob_greedy
         return policy
@@ -43,10 +48,14 @@ class QTable:
         """Decay exploration rate."""
         self.epsilon = max(min_epsilon, self.epsilon * factor)
 
+    def reset_epsilon(self) -> None:
+        """Reset exploration rate."""
+        self.epsilon = self.init_epsilon
+
     def to_txt(self, filename: str) -> None:
         """Save Q-Table to text file."""
         with open(filename, 'w') as f:
             # Write header line with n_states and n_actions
             f.write(f"{self.n_states} {self.n_actions}\n")
             # Write Q-table matrix with space-separated values
-            np.savetxt(f, self.table, delimiter=' ', fmt='%g')
+            np.savetxt(f, self.table.cpu().numpy(), delimiter=' ', fmt='%g')

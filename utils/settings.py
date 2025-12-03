@@ -1,6 +1,4 @@
 """Settings and environment variable management for TSP-RL project."""
-import os
-
 
 # Q-learning options
 EPISODES = 250  # Number of training episodes

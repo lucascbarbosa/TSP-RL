@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Tuple
 from table import QTable
-from utils.plot import plot_history
+from ...utils.plot import plot_history
 
 device = torch.device(
     'cuda' if torch.cuda.is_available() else 'cpu'
@@ -195,7 +195,8 @@ def deep_q_learning(
     for epoch in range(num_epochs):
         epoch_losses = []
         epoch_q_values = []
-
+        epoch_rewards = []
+        epoch_epsilon = []
         for (
             batch_current_states,
             batch_actions,
@@ -224,15 +225,20 @@ def deep_q_learning(
 
             epoch_losses.append(loss.item())
             epoch_q_values.append(current_q.mean().item())
+            epoch_rewards.append(batch_rewards.mean().item())
+            epoch_epsilon.append(model.epsilon)
 
         avg_loss = np.mean(epoch_losses)
         avg_q = np.mean(epoch_q_values)
+        avg_reward = np.mean(epoch_rewards)
+        avg_epsilon = np.mean(epoch_epsilon)
         history['loss'].append(avg_loss)
         history['avg_q_value'].append(avg_q)
-
+        history['avg_reward'].append(avg_reward)
+        history['avg_epsilon'].append(avg_epsilon)
         print(
             f"Epoch {epoch + 1}/{num_epochs}: "
-            f"Loss={avg_loss:.6f}, Avg Q={avg_q:.6f}"
+            f"Loss={avg_loss:.6f}, Avg Q={avg_q:.6f}, Avg Reward={avg_reward:.6f}, Avg Epsilon={avg_epsilon:.6f}"
         )
     return model, history
 
