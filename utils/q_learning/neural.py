@@ -5,8 +5,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Tuple
-from table import QTable
-from ...utils.plot import plot_history
+from utils.plot import plot_history
+from utils.q_learning.table import QTable
+from utils.transition import load_transition_file
 
 device = torch.device(
     'cuda' if torch.cuda.is_available() else 'cpu'
@@ -122,9 +123,7 @@ class DQN(nn.Module):
                 q_values = self.forward(state_one_hot)
 
                 # Convert to numpy and populate QTable
-                q_table.table[state, :] = (
-                    q_values.cpu().numpy().flatten().astype(np.float32)
-                )
+                q_table.table[state, :] = q_values.reshape(-1)
 
         # Set model back to training mode
         self.train()
@@ -141,20 +140,15 @@ def deep_q_learning(
     num_epochs: int = 10,
 ) -> Tuple[DQN, Dict[str, list]]:
     """Train Deep Q-Network (DQN) from transition matrix."""
-    # Read transition matrix
-    transition_matrix = np.loadtxt(transition_filename)
-
-    # Extract columns
-    current_states = transition_matrix[:, 0].astype(int)
-    actions = transition_matrix[:, 1].astype(int)
-    rewards = transition_matrix[:, 2].astype(float)
-    next_states = transition_matrix[:, 3].astype(int)
-
-    # Determine number of states and actions
-    max_state = max(current_states.max(), next_states.max())
-    n_states = max_state + 1
-    max_action = actions.max()
-    n_actions = max_action + 1
+    # Load transition data
+    (
+        current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions,
+    ) = load_transition_file(transition_filename, return_torch=False)
 
     # Apply one-hot encoding to states (convert to float32 for neural network)
     current_states = torch.nn.functional.one_hot(
@@ -188,7 +182,7 @@ def deep_q_learning(
     criterion = nn.MSELoss()
 
     # Training history
-    history = {'loss': [], 'avg_q_value': []}
+    history = {'loss': [], 'avg_q_value': [], 'avg_reward': []}
 
     # Training loop
     model.train()
@@ -196,7 +190,6 @@ def deep_q_learning(
         epoch_losses = []
         epoch_q_values = []
         epoch_rewards = []
-        epoch_epsilon = []
         for (
             batch_current_states,
             batch_actions,
@@ -226,19 +219,18 @@ def deep_q_learning(
             epoch_losses.append(loss.item())
             epoch_q_values.append(current_q.mean().item())
             epoch_rewards.append(batch_rewards.mean().item())
-            epoch_epsilon.append(model.epsilon)
 
         avg_loss = np.mean(epoch_losses)
         avg_q = np.mean(epoch_q_values)
         avg_reward = np.mean(epoch_rewards)
-        avg_epsilon = np.mean(epoch_epsilon)
         history['loss'].append(avg_loss)
         history['avg_q_value'].append(avg_q)
         history['avg_reward'].append(avg_reward)
-        history['avg_epsilon'].append(avg_epsilon)
         print(
             f"Epoch {epoch + 1}/{num_epochs}: "
-            f"Loss={avg_loss:.6f}, Avg Q={avg_q:.6f}, Avg Reward={avg_reward:.6f}, Avg Epsilon={avg_epsilon:.6f}"
+            f"Loss={avg_loss:.6f}, "
+            f"Avg Q={avg_q:.6f}, "
+            f"Avg Reward={avg_reward:.6f}, "
         )
     return model, history
 

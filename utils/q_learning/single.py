@@ -1,7 +1,7 @@
 """Basic Q-Learning implementation."""
-import numpy as np
 import torch
-from table import QTable
+from utils.q_learning.table import QTable
+from utils.transition import load_transition_file
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -14,22 +14,21 @@ def single_q_learning(
     max_iter: int = 100,
 ) -> QTable:
     """Train Q-table from transition matrix using Q-Learning."""
-    # Read transition matrix
-    transition_matrix = torch.from_numpy(
-        np.loadtxt(transition_filename)
-    ).to(device)
+    # Load transition data
+    (
+        current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions,
+    ) = load_transition_file(transition_filename, return_torch=True)
 
-    # Extract columns
-    current_states = transition_matrix[:, 0].to(torch.int32)
-    actions = transition_matrix[:, 1].to(torch.int32)
-    rewards = transition_matrix[:, 2].to(torch.float32)
-    next_states = transition_matrix[:, 3].to(torch.int32)
-
-    # Determine number of states and actions
-    max_state = max(current_states.max().item(), next_states.max().item())
-    n_states = max_state + 1
-    max_action = actions.max().item()
-    n_actions = max_action + 1
+    # Convert to appropriate dtypes
+    current_states = current_states.to(torch.int32)
+    actions = actions.to(torch.int32)
+    rewards = rewards.to(torch.float32)
+    next_states = next_states.to(torch.int32)
 
     # Initialize Q-table as numpy array
     q_table = QTable(
@@ -40,7 +39,7 @@ def single_q_learning(
 
     for i in range(max_iter):
         # Shuffle transitions for each iteration
-        indices = torch.randperm(len(transition_matrix))
+        indices = torch.randperm(len(current_states))
 
         # Reset epsilon
         q_table.reset_epsilon()
