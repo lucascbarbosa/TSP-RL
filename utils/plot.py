@@ -1,6 +1,7 @@
 """Plotting functions."""
 import matplotlib.pyplot as plt
-from typing import Dict, Optional
+import numpy as np
+from typing import Dict, Optional, List
 
 
 def plot_history(
@@ -35,6 +36,31 @@ def plot_history(
 
     plt.tight_layout()
 
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    else:
+        plt.show()
+
+
+def plot_tour(
+    coords: np.ndarray,
+    tour: List[int],
+    title: str = "TSP Tour",
+    save_path: Optional[str] = None
+) -> None:
+    """Plots a TSP tour."""
+    tour = np.array(tour + [tour[0]])
+    xs = [coords[i][0] for i in tour]
+    ys = [coords[i][1] for i in tour]
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(xs, ys, marker='o')
+    for i, (x, y) in enumerate(coords):
+        plt.text(x, y, str(i), fontsize=10)
+    plt.title(title)
+    plt.axis("equal")
+    plt.grid(True)
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
