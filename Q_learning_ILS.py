@@ -120,7 +120,7 @@ class Q_ILS:
         else:
             print("ERROR: Gap value out of expected range")
 
-    def generate_transition(self, max_iter=50, opt_cost=None):
+    def generate_transition(self, max_iter=50, opt_cost=None, out_path="transicao.txt"):
 
         # choose randomly one of the constructive heuristics
         constructive_choice = random.choice(["random", "nearest", "cheapest"])
@@ -137,6 +137,7 @@ class Q_ILS:
         best_solution = ls_solution.copy()
 
         iter_wto_impr = 0
+        output = ""
         while iter_wto_impr < max_iter:
             # perturbation
             perturbed_solution = perturbation.Perturbation.random_two_swap(ls_solution)
@@ -157,9 +158,9 @@ class Q_ILS:
             # acceptance criterion
             # registra o estado escolhido (0..5)
             self.action = self.get_action(constructive_choice, local_search_choice)
-            print(
-                f"action: {self.action} ({constructive_choice} + {local_search_choice})"
-            )
+            #print(
+            #    f"action: {self.action} ({constructive_choice} + {local_search_choice})"
+            #)
 
             if ls_solution.cost < best_solution.cost:
                 best_solution = ls_solution.copy()
@@ -171,14 +172,13 @@ class Q_ILS:
                 ls_solution.cost, opt_cost
             )  # map solution after action (construtivo + busca local) to final state just after action
 
-            print(
-                f"state before action: {i_state}, action: {self.action}, reward: {reward}, state after action: {f_state}"
-            )
+            #print(
+            #    f"state before action: {i_state}, action: {self.action}, reward: {reward}, state after action: {f_state}"
+            #)
+            output += f"{i_state} {self.action} {reward} {f_state}\n"
 
-            # quero escrever em um arquivo a transição (i_state, action, reward, f_state)
-            # com append mode
-            with open("transicao.txt", "a") as f:
-                f.write(f"{i_state} {self.action} {reward} {f_state}\n")
+        with open(out_path, "w") as f:
+            f.write(output)
 
         # print("Best Solution Cost after ILS:", best_solution.cost)
         return best_solution

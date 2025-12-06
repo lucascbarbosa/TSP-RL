@@ -1,2 +1,4 @@
 secrets.secrets
 /data/tsplib
+*.pyc
+/data/train
