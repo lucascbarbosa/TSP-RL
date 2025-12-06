@@ -1,6 +1,10 @@
 """Markov Decision Process implementation."""
 import torch
-from utils.transition import load_transition_file
+
+if __name__ == "__main__":
+    from transition import load_transition_file, load_transition_folder
+else:
+    from utils.transition import load_transition_file, load_transition_folder
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -30,6 +34,40 @@ def build_mdp_model(transition_filename: str):
         n_states,
         n_actions,
     ) = load_transition_file(transition_filename, return_torch=True)
+
+    return build_mdp_model_from_data(current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions)
+
+def build_mdp_model_from_folder(transition_folder: str):
+    """Build MDP model from transitions."""
+    # Load transition data
+    (
+        current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions,
+    ) = load_transition_folder(transition_folder, return_torch=True)
+
+    return build_mdp_model_from_data(current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions)
+
+def build_mdp_model_from_data(current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions):
+    """Build MDP model from transitions."""
 
     # Convert to appropriate dtypes
     current_states = current_states.to(torch.int32)
@@ -79,7 +117,11 @@ def build_mdp_model(transition_filename: str):
 
 
 if __name__ == "__main__":
+    mdp = build_mdp_model_from_folder("data/train/EUC_2D")
+    print(mdp.transition_matrix, mdp.reward_matrix)
+    """
     for i in range(10):
         filename = f"data/transitions/instance_{i + 1:02d}.txt"
         mdp = build_mdp_model(filename)
         print(mdp.transition_matrix, mdp.reward_matrix)
+    """

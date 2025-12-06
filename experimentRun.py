@@ -42,7 +42,7 @@ def process_instance(tsp_instance):
 # --- MAIN BLOCK ---
 if __name__ == "__main__":
     # 1. Load your index splits
-    with open("data/split_computer_0.json", "r") as f:
+    with open("data/split_computer_1.json", "r") as f:
         splits = json.load(f)
 
     filename = "data/EUC_2D.json"
