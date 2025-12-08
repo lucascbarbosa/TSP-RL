@@ -64,11 +64,9 @@ if __name__ == "__main__":
     )
 
     # Argument for the Dataset File (e.g., data/EUC_2D.json)
-    # We default this so you don't always have to type it if it rarely changes
     parser.add_argument(
         "--dataset_path", 
         type=str, 
-        default="data/EUC_2D.json",
         help="Path to the original dataset JSON file."
     )
 

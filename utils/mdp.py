@@ -2,9 +2,9 @@
 import torch
 
 if __name__ == "__main__":
-    from transition import load_transition_file, load_transition_folder
+    from transition import load_transition_file, load_transition_folder, load_transition_from_paths
 else:
-    from utils.transition import load_transition_file, load_transition_folder
+    from utils.transition import load_transition_file, load_transition_folder, load_transition_from_paths
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -42,7 +42,8 @@ def build_mdp_model(transition_filename: str):
         n_states,
         n_actions)
 
-def build_mdp_model_from_folder(transition_folder: str):
+
+def build_mdp_model_from_paths(paths: list, filter=r".*"):
     """Build MDP model from transitions."""
     # Load transition data
     (
@@ -52,7 +53,26 @@ def build_mdp_model_from_folder(transition_folder: str):
         next_states,
         n_states,
         n_actions,
-    ) = load_transition_folder(transition_folder, return_torch=True)
+    ) = load_transition_from_paths(paths, return_torch=True)
+
+    return build_mdp_model_from_data(current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions)
+
+def build_mdp_model_from_folder(transition_folder: str, filter=r".*"):
+    """Build MDP model from transitions."""
+    # Load transition data
+    (
+        current_states,
+        actions,
+        rewards,
+        next_states,
+        n_states,
+        n_actions,
+    ) = load_transition_folder(transition_folder, return_torch=True, filter=filter)
 
     return build_mdp_model_from_data(current_states,
         actions,
@@ -117,8 +137,9 @@ def build_mdp_model_from_data(current_states,
 
 
 if __name__ == "__main__":
-    mdp = build_mdp_model_from_folder("data/train/EUC_2D")
-    print(mdp.transition_matrix, mdp.reward_matrix)
+    for i in range(1,11):
+        mdp = build_mdp_model_from_folder("data/train/EUC_2D", filter=f"nodes_{i}0")
+        print(mdp.transition_matrix, mdp.reward_matrix)
     """
     for i in range(10):
         filename = f"data/transitions/instance_{i + 1:02d}.txt"

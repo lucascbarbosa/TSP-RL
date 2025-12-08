@@ -1,10 +1,12 @@
 """Basic Q-Learning implementation."""
 import torch
 import random
+import json
+import re
 from pathlib import Path
 from typing import Tuple, Dict
-from utils.mdp import build_mdp_model
-from utils.plot import plot_single_q_learning, plot_rollout
+from utils.mdp import build_mdp_model, build_mdp_model_from_folder, build_mdp_model_from_paths
+from utils.plot import plot_single_q_learning, plot_rollout, plot_heatmap
 from utils.q_learning.table import QTable
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -24,6 +26,63 @@ def single_q_learning(
     """
     # Build MDP from transition data
     mdp = build_mdp_model(transition_filename)
+
+    return single_q_learning_from_mdp(mdp,
+        gamma,
+        max_iter,
+        tol,
+        q_table)
+
+def single_q_learning_from_paths(
+    paths: list,
+    gamma: float = 0.99,
+    max_iter: int = 1000,
+    tol: float = 1e-6,
+    q_table: QTable | None = None,
+) -> Tuple[QTable, Dict[str, list]]:
+    """Train Q-table from MDP using Q-Learning.
+
+    Returns:
+        Tuple of (QTable, history) where history contains 'avg_q_value' list
+    """
+    # Build MDP from transition data
+    mdp = build_mdp_model_from_paths(paths)
+
+    return single_q_learning_from_mdp(mdp,
+        gamma,
+        max_iter,
+        tol,
+        q_table)
+
+def single_q_learning_from_folder(
+    transition_folder: str,
+
+    gamma: float = 0.99,
+    max_iter: int = 1000,
+    tol: float = 1e-6,
+    q_table: QTable | None = None,
+) -> Tuple[QTable, Dict[str, list]]:
+    """Train Q-table from MDP using Q-Learning.
+
+    Returns:
+        Tuple of (QTable, history) where history contains 'avg_q_value' list
+    """
+    # Build MDP from transition data
+    mdp = build_mdp_model_from_folder(transition_folder)
+
+    return single_q_learning_from_mdp(mdp,
+        gamma,
+        max_iter,
+        tol,
+        q_table)
+
+def single_q_learning_from_mdp(
+    mdp,
+    gamma: float = 0.99,
+    max_iter: int = 1000,
+    tol: float = 1e-6,
+    q_table: QTable | None = None,
+) -> Tuple[QTable, Dict[str, list]]:
     n_states = mdp.n_states
     n_actions = mdp.n_actions
 
@@ -69,67 +128,69 @@ def single_q_learning(
             )
 
     return q_current, history
-
+    
 
 if __name__ == "__main__":
     import shutil
 
     # Clear previous results
-    plots_dir = Path("data/plots/single")
-    q_tables_dir = Path("data/q_tables/single")
+    plots_dir = Path("data/plots/EUC_2D")
+    q_tables_dir = Path("data/q_tables/EUC_2D")
     if plots_dir.exists():
         shutil.rmtree(plots_dir)
-        plots_dir.mkdir(parents=True, exist_ok=True)
+    
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    
     if q_tables_dir.exists():
         shutil.rmtree(q_tables_dir)
-        q_tables_dir.mkdir(parents=True, exist_ok=True)
-
+    
+    q_tables_dir.mkdir(parents=True, exist_ok=True)
+    
     # Configuration
-    eval_ratio = 0.3  # 30% for evaluation, 70% for training
-    transitions_dir = Path("data/transitions")
+    transitions_dir = Path("data/train/EUC_2D")
+
+    with open("data/splits.json", "r") as f:
+        splits = json.load(f)
 
     # List all available instance files
-    all_files = sorted(transitions_dir.glob("instance_*.txt"))
+    all_files = sorted(transitions_dir.glob("*.txt"))
     all_instances = []
+    eval_instances = []
+    train_instances = []
     for file in all_files:
         # Extract instance number from filename
-        try:
-            instance_num = int(file.stem.split("_")[1])
+        match = re.search(r"random_instance_(\d+)_nodes_(\d+)", str(file))
+        if match:
+            # We assume the ID is the first group captured by the regex
+            instance_num = int(match.group(1))
+            n_nodes = int(match.group(2))
             all_instances.append(instance_num)
-        except (ValueError, IndexError):
-            continue
 
-    # Split instances based on eval_ratio
-    random.shuffle(all_instances[:10])
-    n_eval = int(len(all_instances) * eval_ratio)
-    eval_instances = sorted(all_instances[:n_eval])
-    train_instances = sorted(all_instances[n_eval:])
+            if instance_num in splits["data/EUC_2D.json"]["train"]:
+                train_instances.append((instance_num, str(file), n_nodes))
+            else:
+                eval_instances.append((instance_num, str(file), n_nodes))
 
     # Train on training instances
     q_table = None
     print(f"Training on {len(train_instances)} instances")
-    for i, instance_idx in enumerate(train_instances):
-        print(f"==== Instance {instance_idx:02d} ====")
-        q_table, history = single_q_learning(
-            f"data/transitions/instance_{instance_idx:02d}.txt",
+    for a in range(10):
+        n_cities = (a+1)*10
+        paths = [i[1] for i in train_instances if i[2] == n_cities]
+        print(f"==== Instances with {n_cities:02d} nodes ====")
+        q_table, history = single_q_learning_from_paths(
+            paths,
             max_iter=5000,
             q_table=q_table,
         )
         q_table.to_txt(
-            f"data/q_tables/single/instance_{instance_idx:02d}.txt"
+            f"{q_tables_dir}/instance_size_{n_cities:02d}.txt"
         )
-        plot_path = f"data/plots/single/instance_{instance_idx:02d}_train.png"
-        plot_single_q_learning(history, plot_path)
-
-    # Evaluate with rollout on eval instances
-    print(f"Evaluating on {len(eval_instances)} instances")
-    for i, instance_idx in enumerate(eval_instances):
-        print(f"==== Instance {instance_idx:02d} ====")
-        rollout_history = q_table.rollout(
-            f"data/transitions/instance_{instance_idx:02d}.txt",
-            n_simulations=100,
-            initial_state=0,
-            max_steps=1000,
-        )
-        plot_path = f"data/plots/single/instance_{instance_idx:02d}_eval.png"
-        plot_rollout(rollout_history, plot_path)
+        plot1_path = f"{plots_dir}/instance_size_{n_cities:02d}_train.png"
+        plot2_path = f"{plots_dir}/instance_size_{n_cities:02d}_heatmap.png"
+        plot_single_q_learning(history, plot1_path)
+        plot_heatmap(q_table.table.detach().cpu().numpy(), 
+                     title=f"Q-table heatmap {n_cities}", 
+                     x_labels=[str(i) for i in range(q_table.n_actions)],
+                     y_labels=[str(i) for i in range(q_table.n_states)],
+                     save_path=plot2_path)

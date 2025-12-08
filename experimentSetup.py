@@ -4,7 +4,7 @@ import os
 import re
 import math
 
-def load_ids_from_split(json_path, split_key='train', source_file='data/EUC_2D.json'):
+def load_ids_from_split(json_path, split_key='train', source_file='n'):
     """
     Loads a specific list of IDs (e.g., training set) from a JSON split file.
     
@@ -109,7 +109,7 @@ def get_distributed_remaining_splits(
             "total_instances": len(sp),
             "train": sp
         }
-        with open(f'data/split_computer_{n}.json', 'w') as f:
+        with open(f'data/EUC_split_computer_{n}.json', 'w') as f:
             json.dump(out_splits, f, indent=4)
     
     # Ensure we return exactly n_computers lists (even if empty)
@@ -189,13 +189,13 @@ if __name__ == "__main__":
     file_path = "data/EUC_2D.json"
     #generate_tsp_splits(MY_FILES, output_file="data/splits.json", train_ratio=0.7)
 
-    all_train_ids = load_ids_from_split('data/splits.json', split_key='train')
+    all_train_ids = load_ids_from_split('data/splits.json', split_key='train', source_file=file_path)
 
 
     distributed_work = get_distributed_remaining_splits(
         all_ids=all_train_ids,
         output_dir="data/train/EUC_2D", 
-        n_computers=3,
+        n_computers=1,
         # Adjust this regex to match your EXACT file string structure.
         # The (\d+) part captures the ID.
         filename_pattern=r"random_instance_(\d+)_nodes_\d+" 

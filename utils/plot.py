@@ -2,7 +2,40 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Dict, Optional, List
+import seaborn as sns
 
+def plot_heatmap(matrix, title:str="Q-table heatmap", x_labels:list=[], y_labels:list=[], cmap:str="viridis", save_path: Optional[str] = None):
+    """
+    Plots a heatmap of a 2D matrix.
+
+    Parameters:
+    - matrix: 2D array-like object (list of lists or numpy array).
+    - title: String, title of the plot.
+    - x_labels: List of strings for x-axis labels (optional).
+    - y_labels: List of strings for y-axis labels (optional).
+    - cmap: String, color map scheme (e.g., 'viridis', 'coolwarm', 'Blues').
+    """
+    
+    # Set the figure size suitable for the data dimensions
+    plt.figure(figsize=(10, 8))
+    
+    # Create the heatmap
+    # annot=True writes the data value in each cell
+    # fmt=".2f" formats the numbers to 2 decimal places
+    sns.heatmap(matrix, annot=True, fmt=".2f", cmap=cmap, 
+                xticklabels=x_labels, yticklabels=y_labels)
+
+    # Add titles and labels
+    plt.title(title, fontsize=16)
+    plt.xlabel("Actions", fontsize=12)
+    plt.ylabel("States", fontsize=12)
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close()
 
 def plot_history(
     history: Dict[str, list],
