@@ -4,26 +4,45 @@ import numpy as np
 from typing import Dict, Optional, List
 import seaborn as sns
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import copy # Crucial for modifying colormaps safely
+
 def plot_heatmap(matrix, title:str="Q-table heatmap", x_labels:list=[], y_labels:list=[], cmap:str="viridis", save_path: Optional[str] = None):
     """
-    Plots a heatmap of a 2D matrix.
-
-    Parameters:
-    - matrix: 2D array-like object (list of lists or numpy array).
-    - title: String, title of the plot.
-    - x_labels: List of strings for x-axis labels (optional).
-    - y_labels: List of strings for y-axis labels (optional).
-    - cmap: String, color map scheme (e.g., 'viridis', 'coolwarm', 'Blues').
+    Plots a heatmap where 0.0 values are rendered black, and the
+    colormap stretches only across non-zero values.
+    Assuming input matrix contains floats.
     """
-    
-    # Set the figure size suitable for the data dimensions
     plt.figure(figsize=(10, 8))
     
-    # Create the heatmap
-    # annot=True writes the data value in each cell
-    # fmt=".2f" formats the numbers to 2 decimal places
-    sns.heatmap(matrix, annot=True, fmt=".2f", cmap=cmap, 
-                xticklabels=x_labels, yticklabels=y_labels)
+    # --- STEP 1: Prepare Data ---
+    # Create a copy to avoid modifying the original data outside the function
+    matrix_to_plot = matrix.copy()
+    
+    # Replace exact zeros with NaN (Not a Number)
+    # Matplotlib ignores NaNs when calculating the color scale range.
+    matrix_to_plot[matrix_to_plot == 0.0] = np.nan
+    
+    # --- STEP 2: Prepare Custom Colormap ---
+    # Fetch the desired matplotlib colormap object (e.g., "viridis")
+    # We MUST use copy.copy(), otherwise, we permanently change the standard
+    # 'viridis' map for the rest of the Python session.
+    current_cmap = copy.copy(plt.get_cmap(cmap))
+    
+    # Set the color for NaN (bad) values to solid black
+    current_cmap.set_bad("black")
+
+    # --- STEP 3: Plot ---
+    # Note: We use an fmt that handles floats nicely. 
+    # If annot=True, NaNs usually show up as 'nan' text, which can be cluttered.
+    # Sometimes it's better to turn annot=False if you have many zeros.
+    sns.heatmap(matrix_to_plot, 
+                annot=True,       # Set to False if the 'nan' text annoys you
+                fmt=".1f",        # Format floats to 1 decimal place
+                cmap=current_cmap, 
+                cbar=True)
 
     # Add titles and labels
     plt.title(title, fontsize=16)

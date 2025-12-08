@@ -1,10 +1,7 @@
 """Markov Decision Process implementation."""
 import torch
-
-if __name__ == "__main__":
-    from transition import load_transition_file, load_transition_folder, load_transition_from_paths
-else:
-    from utils.transition import load_transition_file, load_transition_folder, load_transition_from_paths
+import math
+from utils.transition import load_transition_file, load_transition_folder, load_transition_from_paths
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -43,7 +40,7 @@ def build_mdp_model(transition_filename: str):
         n_actions)
 
 
-def build_mdp_model_from_paths(paths: list, filter=r".*"):
+def build_mdp_model_from_paths(paths: list, min_n_states:int = 0, min_n_actions:int = 0):
     """Build MDP model from transitions."""
     # Load transition data
     (
@@ -54,6 +51,9 @@ def build_mdp_model_from_paths(paths: list, filter=r".*"):
         n_states,
         n_actions,
     ) = load_transition_from_paths(paths, return_torch=True)
+
+    n_states = max(n_states, min_n_states)
+    n_actions = max(n_actions, min_n_actions)
 
     return build_mdp_model_from_data(current_states,
         actions,
