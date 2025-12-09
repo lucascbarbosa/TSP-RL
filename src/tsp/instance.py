@@ -5,10 +5,105 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
+
+
+# =============================================================================
+# Distance Metrics (TSPLIB-compatible)
+# =============================================================================
+
+
+def _euc_2d(coords: NDArray[np.float64]) -> NDArray[np.float64]:
+    """
+    Euclidean distance (double precision, no rounding).
+
+    Used for generated instances with coords in [0,1]².
+    """
+    n = len(coords)
+    dist = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = coords[i, 0] - coords[j, 0]
+            dy = coords[i, 1] - coords[j, 1]
+            dist[i, j] = dist[j, i] = math.sqrt(dx * dx + dy * dy)
+    return dist
+
+
+def _att(coords: NDArray[np.float64]) -> NDArray[np.float64]:
+    """
+    Pseudo-Euclidean distance (ATT).
+
+    Special scaling by 1/sqrt(10) with conditional rounding.
+    Used for att48, att532 etc. from TSPLIB.
+    """
+    n = len(coords)
+    dist = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        for j in range(i + 1, n):
+            xd = coords[i, 0] - coords[j, 0]
+            yd = coords[i, 1] - coords[j, 1]
+            rij = math.sqrt((xd * xd + yd * yd) / 10.0)
+            tij = int(rij + 0.5)
+            if tij < rij:
+                dij = tij + 1
+            else:
+                dij = tij
+            dist[i, j] = dist[j, i] = dij
+    return dist
+
+
+def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
+    """
+    Geographic distance (great-circle on Earth).
+
+    Coordinates are in TSPLIB degree format (DDD.MM where MM is minutes).
+    Used for ulysses16, ulysses22 etc. from TSPLIB.
+    """
+    n = len(coords)
+    RRR = 6378.388  # Earth radius in km
+    PI = 3.141592
+
+    # Convert TSPLIB degree format to radians
+    lats = np.zeros(n)
+    lons = np.zeros(n)
+    for i in range(n):
+        deg_lat = int(coords[i, 0])
+        min_lat = coords[i, 0] - deg_lat
+        lats[i] = PI * (deg_lat + 5.0 * min_lat / 3.0) / 180.0
+
+        deg_lon = int(coords[i, 1])
+        min_lon = coords[i, 1] - deg_lon
+        lons[i] = PI * (deg_lon + 5.0 * min_lon / 3.0) / 180.0
+
+    # Compute great-circle distances
+    dist = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        for j in range(i + 1, n):
+            q1 = math.cos(lons[i] - lons[j])
+            q2 = math.cos(lats[i] - lats[j])
+            q3 = math.cos(lats[i] + lats[j])
+            dij = int(RRR * math.acos(0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3)) + 1.0)
+            dist[i, j] = dist[j, i] = dij
+    return dist
+
+
+# Registry: edge_weight_type -> distance function
+DISTANCE_METRICS: Dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]] = {
+    "EUC_2D": _euc_2d,
+    "ATT": _att,
+    "GEO": _geo,
+}
+
+
+def _infer_edge_weight_type(path: Union[str, Path]) -> str:
+    """Infer edge weight type from file path (e.g., 'data/GEO.json' -> 'GEO')."""
+    stem = Path(path).stem.upper()
+    if stem in DISTANCE_METRICS:
+        return stem
+    return "EUC_2D"  # Default fallback
 
 
 class TSPInstance:
@@ -22,6 +117,7 @@ class TSPInstance:
         n: Number of cities.
         dimension: Alias for n.
         name: Instance identifier.
+        edge_weight_type: Distance metric type (EUC_2D, ATT, GEO).
         dist_matrix: Precomputed distance matrix.
         opt_tour: Optimal tour if available.
     """
@@ -32,6 +128,7 @@ class TSPInstance:
         instance_id: int = 0,
         num_cities: Optional[int] = None,
         preloaded_data: Optional[List[Dict[str, Any]]] = None,
+        edge_weight_type: Optional[str] = None,
     ) -> None:
         """
         Initialize TSP instance.
@@ -41,6 +138,7 @@ class TSPInstance:
             instance_id: Index of instance within the JSON file.
             num_cities: Limit number of cities (None = use all).
             preloaded_data: Pre-loaded JSON data (avoids re-reading file).
+            edge_weight_type: Distance metric (EUC_2D, ATT, GEO). Inferred from path if None.
         """
         if preloaded_data is not None:
             data = preloaded_data
@@ -59,13 +157,13 @@ class TSPInstance:
         self.dimension = self.n
         self.name = f"random_instance_{instance_id}_nodes_{self.n}"
 
-        # Compute distance matrix
-        self.dist_matrix: NDArray[np.float64] = np.zeros((self.n, self.n))
-        for i in range(self.n):
-            xi, yi = self.coords[i]
-            for j in range(self.n):
-                xj, yj = self.coords[j]
-                self.dist_matrix[i, j] = math.sqrt((xi - xj) ** 2 + (yi - yj) ** 2)
+        # Determine edge weight type
+        self.edge_weight_type = edge_weight_type or _infer_edge_weight_type(path)
+
+        # Compute distance matrix using appropriate metric
+        coords_array = np.array(self.coords, dtype=np.float64)
+        distance_func = DISTANCE_METRICS.get(self.edge_weight_type, _euc_2d)
+        self.dist_matrix: NDArray[np.float64] = distance_func(coords_array)
 
         # Load optimal tour if available
         if "tour" in entry and entry["tour"] is not None:
@@ -103,6 +201,7 @@ class TSPDataset:
         self,
         json_file_path: Union[str, Path],
         active_indices: List[int],
+        edge_weight_type: Optional[str] = None,
     ) -> None:
         """
         Initialize dataset.
@@ -110,9 +209,11 @@ class TSPDataset:
         Args:
             json_file_path: Path to JSON file with instances.
             active_indices: List of instance IDs to include (e.g., train IDs).
+            edge_weight_type: Distance metric (inferred from path if None).
         """
         self.path = str(json_file_path)
         self.indices = active_indices
+        self.edge_weight_type = edge_weight_type or _infer_edge_weight_type(json_file_path)
 
         print(f"Loading {json_file_path} into memory...")
         with open(json_file_path, "r") as f:
@@ -129,6 +230,7 @@ class TSPDataset:
             path=self.path,
             instance_id=real_instance_id,
             preloaded_data=self.data_in_memory,
+            edge_weight_type=self.edge_weight_type,
         )
 
     def __iter__(self) -> Iterator[TSPInstance]:
