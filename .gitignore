@@ -1,5 +1,14 @@
-secrets.secrets
-/data/tsplib
-*.pyc
-/data/train
+*.py[cod]
 .vscode/launch.json
+secrets.secrets
+data/tsplib
+data/train
+
+# LaTeX
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.synctex.gz

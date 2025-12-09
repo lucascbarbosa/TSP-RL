@@ -1,0 +1,37 @@
+' etc/plantuml/qils_flow_fase3.plantuml
+' Fase 3: Avaliação
+@startuml
+<style>
+  .Fase3 {
+    BackGroundColor: #FFF3E0;
+    FontColor: #E65100;
+  }
+</style>
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam backgroundColor transparent
+skinparam DefaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #006446
+  FontColor #2D2D2D
+}
+
+title **Fase 3**\nAvaliação\n(online)
+
+rectangle "ILS guiado\npela Q-table" as ILS2 <<Fase3>>
+rectangle "Política\nε-greedy" as POL <<Fase3>>
+rectangle "Instâncias\nde teste" as TEST <<Fase3>>
+
+ILS2 -down-> POL
+POL -down-> TEST
+
+hide <<Fase3>> stereotype
+
+@enduml

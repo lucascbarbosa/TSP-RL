@@ -1,0 +1,55 @@
+' etc/plantuml/mdp_mapping.plantuml
+' Mapeamento MDP para o contexto Q-ILS - MDP em cima, Q-ILS embaixo
+@startuml
+<style>
+  .MDP {
+    BackGroundColor: #E8EAF6;
+    FontColor: #283593;
+  }
+  .QILS {
+    BackGroundColor: #E8F5E9;
+    FontColor: #1B5E20;
+  }
+</style>
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam backgroundColor #FAFAFA
+skinparam DefaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #006446
+  FontColor #2D2D2D
+}
+
+top to bottom direction
+
+title Modelagem MDP no Q-ILS
+
+rectangle "**MDP Genérico**" as MDP <<MDP>> {
+  rectangle "S: Estados" as S_MDP
+  rectangle "A: Ações" as A_MDP
+  rectangle "T: Transições" as T_MDP
+  rectangle "R: Recompensas" as R_MDP
+}
+
+rectangle "**Q-ILS (TSP)**" as QILS <<QILS>> {
+  rectangle "Gap discretizado\n(0-2%, 2-5%, 5-10%,\n>10%, <0%)" as S_QILS
+  rectangle "(Construtivo, Busca Local)\n9 combinações" as A_QILS
+  rectangle "P(s'|s,a) estimada\nde execuções" as T_QILS
+  rectangle "Maior para gaps menores\n(0, 25, 50, 75, 100)" as R_QILS
+}
+
+S_MDP -down-> S_QILS
+A_MDP -down-> A_QILS
+T_MDP -down-> T_QILS
+R_MDP -down-> R_QILS
+
+hide <<MDP>> stereotype
+hide <<QILS>> stereotype
+
+@enduml

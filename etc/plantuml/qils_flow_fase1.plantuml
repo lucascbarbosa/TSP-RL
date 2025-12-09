@@ -1,0 +1,37 @@
+' etc/plantuml/qils_flow_fase1.plantuml
+' Fase 1: Geração de Transições
+@startuml
+<style>
+  .Fase1 {
+    BackGroundColor: #E8F5E9;
+    FontColor: #1B5E20;
+  }
+</style>
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam backgroundColor transparent
+skinparam DefaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #006446
+  FontColor #2D2D2D
+}
+
+title **Fase 1**\nGeração de Transições\n(offline)
+
+rectangle "ILS com escolhas\naleatórias" as ILS1 <<Fase1>>
+rectangle "Registrar tuplas\n(s, a, r, s')" as REG <<Fase1>>
+rectangle "Múltiplas\ninstâncias de treino" as MULT <<Fase1>>
+
+ILS1 -down-> REG
+REG -down-> MULT
+
+hide <<Fase1>> stereotype
+
+@enduml

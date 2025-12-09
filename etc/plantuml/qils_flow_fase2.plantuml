@@ -1,0 +1,37 @@
+' etc/plantuml/qils_flow_fase2.plantuml
+' Fase 2: Treinamento
+@startuml
+<style>
+  .Fase2 {
+    BackGroundColor: #E3F2FD;
+    FontColor: #0D47A1;
+  }
+</style>
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam backgroundColor transparent
+skinparam DefaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #006446
+  FontColor #2D2D2D
+}
+
+title **Fase 2**\nTreinamento\n(offline)
+
+rectangle "Construir MDP\na partir das transições" as MDP <<Fase2>>
+rectangle "Q-Learning\niterativo" as QL <<Fase2>>
+rectangle "Q-table\nconvergida" as QT <<Fase2>>
+
+MDP -down-> QL
+QL -down-> QT
+
+hide <<Fase2>> stereotype
+
+@enduml

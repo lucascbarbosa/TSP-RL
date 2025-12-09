@@ -1,0 +1,57 @@
+' etc/plantuml/ils_loop.plantuml
+' Loop do ILS com decisão por Q-table - versão compacta
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 15
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 8
+
+skinparam activity {
+  BackgroundColor #E8F5E9
+  BorderColor #006446
+  FontColor #1B5E20
+  DiamondBackgroundColor #FFF3E0
+  DiamondBorderColor #E65100
+  DiamondFontColor #E65100
+}
+
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+
+title Loop do Q-ILS
+
+start
+
+:Gerar s₀ (Construtivo);
+
+:Busca local inicial;
+
+:best = s₀;
+
+repeat
+  :Perturbar solução;
+
+  :Calcular estado s (gap);
+
+  :a = argmax Q(s,a);
+
+  :Executar ação a;
+
+  if (custo < best?) then (sim)
+    :best = s;
+    :i = 0;
+  else (não)
+    :i++;
+  endif
+
+repeat while (i < max?) is (sim)
+->não;
+
+:Retornar best;
+
+stop
+
+@enduml
