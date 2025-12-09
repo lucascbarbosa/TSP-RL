@@ -1,0 +1,178 @@
+#!/usr/bin/env python
+"""
+Train Q-tables from transition data using value iteration.
+
+Usage:
+    python scripts/train_qtable.py
+    python scripts/train_qtable.py --types EUC_2D --sizes 10 20 30
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+from pathlib import Path
+from typing import List, Tuple
+
+from tqdm import tqdm
+
+from src.rl.q_learning import train_q_table_from_paths
+from src.rl.q_table import QTable
+
+# Optional: import plotting utilities
+try:
+    from utils.plot import plot_single_q_learning, plot_heatmap
+
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
+
+
+def get_transition_files(
+    transitions_dir: Path,
+    train_ids: List[int],
+) -> List[Tuple[int, str, int]]:
+    """
+    Get list of transition files matching training instances.
+
+    Args:
+        transitions_dir: Directory containing transition files.
+        train_ids: List of training instance IDs.
+
+    Returns:
+        List of (instance_num, file_path, n_nodes) tuples.
+    """
+    all_files = sorted(transitions_dir.glob("*.txt"))
+    train_instances: List[Tuple[int, str, int]] = []
+
+    for file in all_files:
+        match = re.search(r"random_instance_(\d+)_nodes_(\d+)", str(file))
+        if match:
+            instance_num = int(match.group(1))
+            n_nodes = int(match.group(2))
+
+            if instance_num in train_ids:
+                train_instances.append((instance_num, str(file), n_nodes))
+
+    return train_instances
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train Q-tables from transition data")
+    parser.add_argument(
+        "--types",
+        type=str,
+        nargs="+",
+        default=["EUC_2D", "GEO", "ATT"],
+        help="Instance types to train (default: EUC_2D GEO ATT)",
+    )
+    parser.add_argument(
+        "--sizes",
+        type=int,
+        nargs="+",
+        default=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+        help="Instance sizes to train (default: 10 20 ... 100)",
+    )
+    parser.add_argument(
+        "--max_iter",
+        type=int,
+        default=5000,
+        help="Max iterations for Q-learning (default: 5000)",
+    )
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        default=0.99,
+        help="Discount factor (default: 0.99)",
+    )
+    parser.add_argument(
+        "--splits",
+        type=str,
+        default="data/splits.json",
+        help="Path to splits JSON file",
+    )
+    parser.add_argument(
+        "--no_plots",
+        action="store_true",
+        help="Disable plot generation",
+    )
+    args = parser.parse_args()
+
+    # Load splits
+    with open(args.splits, "r") as f:
+        splits = json.load(f)
+
+    # Process each instance type
+    for instance_type in tqdm(args.types, desc="Instance types", ncols=120):
+        plots_dir = Path(f"data/plots/{instance_type}")
+        q_tables_dir = Path(f"data/q_tables/{instance_type}")
+
+        # Clean and create directories
+        if plots_dir.exists():
+            shutil.rmtree(plots_dir)
+        plots_dir.mkdir(parents=True, exist_ok=True)
+
+        if q_tables_dir.exists():
+            shutil.rmtree(q_tables_dir)
+        q_tables_dir.mkdir(parents=True, exist_ok=True)
+
+        transitions_dir = Path(f"data/train/{instance_type}")
+
+        if not transitions_dir.exists():
+            print(f"  [!] No transitions found for {instance_type}, skipping...")
+            continue
+
+        # Get training instance IDs
+        split_key = f"data/{instance_type}.json"
+        if split_key not in splits:
+            print(f"  [!] No splits found for {instance_type}, skipping...")
+            continue
+
+        train_ids = splits[split_key]["train"]
+
+        # Get transition files
+        train_instances = get_transition_files(transitions_dir, train_ids)
+        print(f"\n  Training {instance_type} on {len(train_instances)} transition files")
+
+        # Train incrementally by size
+        q_table: QTable | None = None
+
+        for n_cities in tqdm(args.sizes, desc=f"  {instance_type} sizes", ncols=120, leave=False):
+            paths = [i[1] for i in train_instances if i[2] == n_cities]
+
+            if not paths:
+                continue
+
+            q_table, history = train_q_table_from_paths(
+                paths,
+                gamma=args.gamma,
+                max_iter=args.max_iter,
+                q_table=q_table,
+                min_n_actions=8,  # 8 actions (5 perturbations x 2 local searches, with omissions)
+                min_n_states=5,  # 5 states (gap-based)
+            )
+
+            # Save Q-table
+            q_table.to_txt(f"{q_tables_dir}/instance_size_{n_cities:02d}.txt")
+
+            # Generate plots if available and enabled
+            if HAS_PLOTTING and not args.no_plots:
+                plot1_path = f"{plots_dir}/instance_size_{instance_type}_{n_cities:02d}_train.png"
+                plot2_path = f"{plots_dir}/instance_size_{instance_type}_{n_cities:02d}_heatmap.png"
+
+                plot_single_q_learning(history, plot1_path)
+                plot_heatmap(
+                    q_table.table.detach().cpu().numpy(),
+                    title=f"Q-table heatmap {instance_type} {n_cities}",
+                    x_labels=[str(i) for i in range(q_table.n_actions)],
+                    y_labels=[str(i) for i in range(q_table.n_states)],
+                    save_path=plot2_path,
+                )
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

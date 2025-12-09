@@ -1,61 +1,54 @@
-"""Plotting functions."""
+"""Plotting utilities for TSP-RL visualization."""
+
+from __future__ import annotations
+
+import copy
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import Dict, Optional, List
 import seaborn as sns
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-import copy  # Crucial for modifying colormaps safely
+from numpy.typing import NDArray
 
 
 def plot_heatmap(
-    matrix,
+    matrix: NDArray[np.float64],
     title: str = "Q-table heatmap",
-    x_labels: list = [],
-    y_labels: list = [],
+    x_labels: List[str] | None = None,
+    y_labels: List[str] | None = None,
     cmap: str = "viridis",
-    save_path: Optional[str] = None,
-):
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
     """
-    Plots a heatmap where 0.0 values are rendered black, and the
-    colormap stretches only across non-zero values.
-    Assuming input matrix contains floats.
+    Plot a heatmap with zeros rendered as black.
+
+    Args:
+        matrix: 2D array to visualize.
+        title: Plot title.
+        x_labels: Labels for x-axis (actions).
+        y_labels: Labels for y-axis (states).
+        cmap: Matplotlib colormap name.
+        save_path: Path to save figure (displays if None).
     """
     plt.figure(figsize=(10, 8))
 
-    # --- STEP 1: Prepare Data ---
-    # Create a copy to avoid modifying the original data outside the function
+    # Replace zeros with NaN for proper colormap handling
     matrix_to_plot = matrix.copy()
-
-    # Replace exact zeros with NaN (Not a Number)
-    # Matplotlib ignores NaNs when calculating the color scale range.
     matrix_to_plot[matrix_to_plot == 0.0] = np.nan
 
-    # --- STEP 2: Prepare Custom Colormap ---
-    # Fetch the desired matplotlib colormap object (e.g., "viridis")
-    # We MUST use copy.copy(), otherwise, we permanently change the standard
-    # 'viridis' map for the rest of the Python session.
+    # Create colormap with black for NaN values
     current_cmap = copy.copy(plt.get_cmap(cmap))
-
-    # Set the color for NaN (bad) values to solid black
     current_cmap.set_bad("black")
 
-    # --- STEP 3: Plot ---
-    # Note: We use an fmt that handles floats nicely.
-    # If annot=True, NaNs usually show up as 'nan' text, which can be cluttered.
-    # Sometimes it's better to turn annot=False if you have many zeros.
     sns.heatmap(
         matrix_to_plot,
-        annot=True,  # Set to False if the 'nan' text annoys you
-        fmt=".1f",  # Format floats to 1 decimal place
+        annot=True,
+        fmt=".1f",
         cmap=current_cmap,
         cbar=True,
     )
 
-    # Add titles and labels
     plt.title(title, fontsize=16)
     plt.xlabel("Actions", fontsize=12)
     plt.ylabel("States", fontsize=12)
@@ -68,12 +61,16 @@ def plot_heatmap(
     plt.close()
 
 
-def plot_history(history: Dict[str, list], save_path: Optional[str] = None) -> None:
-    """Plot training history.
+def plot_history(
+    history: Dict[str, List[float]],
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot training history with loss and Q-value.
 
     Args:
-        history: Dictionary containing 'loss' and 'avg_q_value' lists
-        save_path: Optional path to save the plot. If None, display the plot.
+        history: Dictionary with 'loss' and 'avg_q_value' lists.
+        save_path: Path to save figure (displays if None).
     """
     epochs = range(1, len(history["loss"]) + 1)
 
@@ -100,14 +97,19 @@ def plot_history(history: Dict[str, list], save_path: Optional[str] = None) -> N
         print(f"Plot saved to {save_path}")
     else:
         plt.show()
+    plt.close()
 
 
-def plot_single_q_learning(history: Dict[str, list], save_path: Optional[str] = None) -> None:
-    """Plot single Q-Learning training history.
+def plot_single_q_learning(
+    history: Dict[str, List[float]],
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot single Q-Learning training history.
 
     Args:
-        history: Dictionary containing 'avg_q_value' list
-        save_path: Optional path to save the plot. If None, display the plot.
+        history: Dictionary with 'avg_q_value' list.
+        save_path: Path to save figure (displays if None).
     """
     iterations = range(1, len(history["avg_q_value"]) + 1)
 
@@ -128,13 +130,16 @@ def plot_single_q_learning(history: Dict[str, list], save_path: Optional[str] = 
     plt.close()
 
 
-def plot_double_q_learning(history: Dict[str, list], save_path: Optional[str] = None) -> None:
-    """Plot double Q-Learning training history.
+def plot_double_q_learning(
+    history: Dict[str, List[float]],
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot double Q-Learning training history.
 
     Args:
-        history: Dictionary containing 'avg_q_value_q1' and
-            'avg_q_value_q2' lists
-        save_path: Optional path to save the plot. If None, display the plot.
+        history: Dictionary with 'avg_q_value_q1' and 'avg_q_value_q2' lists.
+        save_path: Path to save figure (displays if None).
     """
     iterations = range(1, len(history["avg_q_value_q1"]) + 1)
 
@@ -157,12 +162,16 @@ def plot_double_q_learning(history: Dict[str, list], save_path: Optional[str] = 
     plt.close()
 
 
-def plot_rollout(history: Dict[str, list], save_path: Optional[str] = None) -> None:
-    """Plot rollout evaluation results.
+def plot_rollout(
+    history: Dict[str, List[float]],
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot rollout evaluation results.
 
     Args:
-        history: Dictionary containing 'rewards' and 'length' lists
-        save_path: Optional path to save the plot. If None, display the plot.
+        history: Dictionary with 'rewards' and 'length' lists.
+        save_path: Path to save figure (displays if None).
     """
     n_simulations = len(history["rewards"])
     simulations = range(1, n_simulations + 1)
@@ -193,21 +202,38 @@ def plot_rollout(history: Dict[str, list], save_path: Optional[str] = None) -> N
     plt.close()
 
 
-def plot_tour(coords: np.ndarray, tour: List[int], title: str = "TSP Tour", save_path: Optional[str] = None) -> None:
-    """Plots a TSP tour."""
-    tour = np.array(tour + [tour[0]])
-    xs = [coords[i][0] for i in tour]
-    ys = [coords[i][1] for i in tour]
+def plot_tour(
+    coords: NDArray[np.float64],
+    tour: List[int],
+    title: str = "TSP Tour",
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot a TSP tour on 2D coordinates.
+
+    Args:
+        coords: Array of (x, y) coordinates.
+        tour: Tour as list of city indices (0-based).
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    closed_tour = list(tour) + [tour[0]]
+    xs = [coords[i][0] for i in closed_tour]
+    ys = [coords[i][1] for i in closed_tour]
 
     plt.figure(figsize=(6, 6))
     plt.plot(xs, ys, marker="o")
+
     for i, (x, y) in enumerate(coords):
         plt.text(x, y, str(i), fontsize=10)
+
     plt.title(title)
     plt.axis("equal")
     plt.grid(True)
+
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Plot saved to {save_path}")
     else:
         plt.show()
+    plt.close()

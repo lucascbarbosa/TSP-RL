@@ -25,28 +25,28 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 
 O estado é definido pelo **gap percentual** entre a solução atual e o ótimo conhecido:
 
-| Estado | Gap (%)     | Recompensa | Interpretação          |
-|--------|-------------|------------|------------------------|
-| 0      | 0 – 2       | 75         | Excelente              |
-| 1      | 2 – 5       | 50         | Bom                    |
-| 2      | 5 – 10      | 25         | Regular                |
-| 3      | > 10        | 0          | Ruim                   |
-| 4      | < 0         | 100        | Melhor que o ótimo     |
+| Estado    | Gap (%)     | Recompensa | Interpretação          |
+|-----------|-------------|------------|------------------------|
+| EXCELLENT | 0 – 2       | 75         | Excelente              |
+| GOOD      | 2 – 5       | 50         | Bom                    |
+| REGULAR   | 5 – 10      | 25         | Regular                |
+| POOR      | > 10        | 0          | Ruim                   |
+| BETTER    | < 0         | 100        | Melhor que o ótimo     |
 
 ### Ações (8)
 
 Cada ação é um par **(perturbação, busca local)**:
 
-| Ação | Perturbação      | Busca Local    | Uso                      |
-|------|------------------|----------------|--------------------------|
-| 0    | two_swap         | 2-opt          | Refinamento leve         |
-| 1    | two_swap         | Lin-Kernighan  | Refinamento moderado     |
-| 2    | segment_reverse  | 2-opt          | Perturbação média        |
-| 3    | segment_reverse  | Lin-Kernighan  | Perturbação + intensif.  |
-| 4    | random           | 2-opt          | Restart rápido           |
-| 5    | nearest          | 2-opt          | Restart de qualidade     |
-| 6    | cheapest         | 2-opt          | Restart alta qualidade   |
-| 7    | nearest          | Lin-Kernighan  | Restart + intensificação |
+| Ação                 | Perturbação      | Busca Local    | Uso                      |
+|----------------------|------------------|----------------|--------------------------|
+| TWO_SWAP_2OPT        | two_swap         | 2-opt          | Refinamento leve         |
+| TWO_SWAP_LK          | two_swap         | Lin-Kernighan  | Refinamento moderado     |
+| SEGMENT_REVERSE_2OPT | segment_reverse  | 2-opt          | Perturbação média        |
+| SEGMENT_REVERSE_LK   | segment_reverse  | Lin-Kernighan  | Perturbação + intensif.  |
+| RANDOM_2OPT          | random           | 2-opt          | Restart rápido           |
+| NEAREST_2OPT         | nearest          | 2-opt          | Restart de qualidade     |
+| CHEAPEST_2OPT        | cheapest         | 2-opt          | Restart alta qualidade   |
+| NEAREST_LK           | nearest          | Lin-Kernighan  | Restart + intensificação |
 
 **Tipos de perturbação:**
 - **Leves** (`two_swap`, `segment_reverse`): modificam levemente a solução atual
@@ -60,33 +60,37 @@ Cada ação é um par **(perturbação, busca local)**:
 
 ```
 TSP-RL/
-├── Q_learning_ILS.py         # Classe Q_ILS principal
-├── main.py                   # Avaliação com Q-table treinada
-├── experimentRun.py          # Geração de transições (paralelo)
-├── instance.py               # Carga de instâncias TSP
-├── solution.py               # Representação de soluções
-├── constructive_heuristic.py # Random, Nearest Neighbor, Cheapest Insertion
-├── local_search.py           # 2-opt, Lin-Kernighan
-├── perturbation.py           # Perturbações para ILS
+├── src/                         # Código fonte principal
+│   ├── tsp/                     # Componentes core do TSP
+│   │   ├── solution.py          # Representação de soluções
+│   │   ├── instance.py          # TSPInstance, TSPDataset
+│   │   ├── local_search.py      # 2-opt, Lin-Kernighan
+│   │   ├── perturbation.py      # Perturbações para ILS
+│   │   └── constructive.py      # Heurísticas construtivas
+│   ├── ils/                     # Framework ILS
+│   │   └── q_ils.py             # Classe QILS principal
+│   └── rl/                      # Reinforcement Learning
+│       ├── q_table.py           # Classe QTable
+│       ├── q_learning.py        # Q-Learning (value iteration)
+│       ├── mdp.py               # Construção do MDP
+│       └── transition.py        # Carga de transições
 ├── scripts/
-│   └── generate_splits.py    # Gera splits train/test reprodutíveis
+│   ├── evaluate.py              # Avaliação com Q-table treinada
+│   ├── train_transitions.py     # Geração de transições (paralelo)
+│   ├── train_qtable.py          # Treinamento de Q-tables
+│   └── generate_splits.py       # Gera splits train/test
 ├── utils/
-│   ├── mdp.py                # Construção do MDP a partir de transições
-│   ├── transition.py         # Carga de arquivos de transição
-│   ├── q_learning/
-│   │   ├── single.py         # Single Q-Learning (iteração de valor)
-│   │   └── table.py          # Classe QTable
-│   └── plot.py               # Visualizações
+│   └── plot.py                  # Visualizações
 ├── data/
-│   ├── EUC_2D.json           # Instâncias euclidianas
-│   ├── ATT.json              # Instâncias ATT
-│   ├── GEO.json              # Instâncias geográficas
-│   ├── splits.json           # Divisão treino/teste (90/10, seed=42)
-│   ├── q_tables/             # Q-tables treinadas
-│   └── train/                # Dados de transição (gitignored)
+│   ├── EUC_2D.json              # Instâncias euclidianas
+│   ├── ATT.json                 # Instâncias ATT
+│   ├── GEO.json                 # Instâncias geográficas
+│   ├── splits.json              # Divisão treino/teste (90/10, seed=42)
+│   ├── q_tables/                # Q-tables treinadas
+│   └── train/                   # Dados de transição (gitignored)
 └── etc/
-    ├── plantuml/             # Diagramas do framework
-    └── slides/               # Apresentação
+    ├── plantuml/                # Diagramas do framework
+    └── slides/                  # Apresentação
 ```
 
 ## Fluxo de Execução
@@ -96,7 +100,7 @@ TSP-RL/
 Executa ILS com escolhas aleatórias de (perturbação, busca local), registrando tuplas `(s, a, r, s')`:
 
 ```bash
-python experimentRun.py \
+python scripts/train_transitions.py \
     --split_path data/splits.json \
     --dataset_path data/EUC_2D.json \
     --output_dir data/train/EUC_2D
@@ -107,7 +111,7 @@ python experimentRun.py \
 Constrói o MDP a partir das transições e treina via Q-Learning:
 
 ```bash
-python -m utils.q_learning.single --types EUC_2D --sizes 10 20 30
+python scripts/train_qtable.py --types EUC_2D --sizes 10 20 30
 ```
 
 ### 3. Avaliação
@@ -115,7 +119,7 @@ python -m utils.q_learning.single --types EUC_2D --sizes 10 20 30
 Executa o ILS guiado pela Q-table em instâncias de teste:
 
 ```bash
-python main.py
+python scripts/evaluate.py --types EUC_2D GEO ATT
 ```
 
 ## Componentes
@@ -139,11 +143,10 @@ python main.py
 ## Uso Básico
 
 ```python
-from Q_learning_ILS import Q_ILS
-from instance import RandomTSPInstance
+from src import QILS, TSPInstance
 
 # Carregar instância
-problem = RandomTSPInstance("data/EUC_2D.json", instance_id=123)
+problem = TSPInstance("data/EUC_2D.json", instance_id=123)
 
 # Calcular custo ótimo
 opt_tour = problem.opt_tour
@@ -153,11 +156,11 @@ opt_cost = sum(
 )
 
 # Criar solver e carregar Q-table
-q_ils = Q_ILS(problem)
-q_ils.load_qtable("data/q_tables/EUC_2D/instance_size_50.txt")
+solver = QILS(problem)
+solver.load_q_table("data/q_tables/EUC_2D/instance_size_50.txt")
 
 # Executar
-best_solution = q_ils.exec_q_table(max_iter=50, opt_cost=opt_cost, epsilon=0.1)
+best_solution = solver.run(max_iter=50, opt_cost=opt_cost, epsilon=0.1)
 
 print(f"Custo: {best_solution.cost}")
 print(f"Gap: {((best_solution.cost - opt_cost) / opt_cost) * 100:.2f}%")
