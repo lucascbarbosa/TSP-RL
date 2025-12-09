@@ -1,5 +1,5 @@
 ' etc/plantuml/ils_loop.plantuml
-' Loop do ILS com decisão por Q-table - versão compacta
+' Loop do Q-ILS: agente decide par (perturbação, busca local)
 @startuml
 
 skinparam Dpi 300
@@ -27,22 +27,39 @@ start
 
 :Gerar s₀ (Construtivo);
 
-:Busca local inicial;
+:Busca local inicial (3-opt);
 
-:best = s₀;
+:best ← s₀;
 
 repeat
-  :Perturbar solução;
+  :Observar estado s (gap);
 
-  :Calcular estado s (gap);
+  :Consultar Q-table:
+  a = argmax Q(s, a);
 
-  :a = argmax Q(s,a);
+  note right
+    Ação a = (Pert, BL)
+    ──────────────────
+    **Perturbações:**
+    • two_swap
+    • segment_reverse
+    • random (construtivo)
+    • nearest (construtivo)
+    • cheapest (construtivo)
+    ──────────────────
+    **Buscas Locais:**
+    • 2-opt
+    • 3-opt
+    • Lin-Kernighan
+  end note
 
-  :Executar ação a;
+  :Aplicar perturbação;
+
+  :Aplicar busca local;
 
   if (custo < best?) then (sim)
-    :best = s;
-    :i = 0;
+    :best ← s;
+    :i ← 0;
   else (não)
     :i++;
   endif

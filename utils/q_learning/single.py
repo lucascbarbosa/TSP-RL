@@ -185,7 +185,7 @@ if __name__ == "__main__":
                 paths,
                 max_iter=5000,
                 q_table=q_table,
-                min_n_actions=9,
+                min_n_actions=15,  # 5 perturbações x 3 buscas locais
                 min_n_states=5
             )
             q_table.to_txt(
