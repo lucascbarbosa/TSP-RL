@@ -33,33 +33,28 @@ O estado é definido pelo **gap percentual** entre a solução atual e o ótimo 
 | 3      | > 10        | 0          | Ruim                   |
 | 4      | < 0         | 100        | Melhor que o ótimo     |
 
-### Ações (15)
+### Ações (8)
 
 Cada ação é um par **(perturbação, busca local)**:
 
-| Ação | Perturbação      | Busca Local    | Tipo              |
-|------|------------------|----------------|-------------------|
-| 0    | two_swap         | 2-opt          | Leve              |
-| 1    | two_swap         | 3-opt          | Leve              |
-| 2    | two_swap         | Lin-Kernighan  | Leve              |
-| 3    | segment_reverse  | 2-opt          | Média             |
-| 4    | segment_reverse  | 3-opt          | Média             |
-| 5    | segment_reverse  | Lin-Kernighan  | Média             |
-| 6    | random           | 2-opt          | Destrutiva        |
-| 7    | random           | 3-opt          | Destrutiva        |
-| 8    | random           | Lin-Kernighan  | Destrutiva        |
-| 9    | nearest          | 2-opt          | Destrutiva        |
-| 10   | nearest          | 3-opt          | Destrutiva        |
-| 11   | nearest          | Lin-Kernighan  | Destrutiva        |
-| 12   | cheapest         | 2-opt          | Destrutiva        |
-| 13   | cheapest         | 3-opt          | Destrutiva        |
-| 14   | cheapest         | Lin-Kernighan  | Destrutiva        |
+| Ação | Perturbação      | Busca Local    | Uso                      |
+|------|------------------|----------------|--------------------------|
+| 0    | two_swap         | 2-opt          | Refinamento leve         |
+| 1    | two_swap         | Lin-Kernighan  | Refinamento moderado     |
+| 2    | segment_reverse  | 2-opt          | Perturbação média        |
+| 3    | segment_reverse  | Lin-Kernighan  | Perturbação + intensif.  |
+| 4    | random           | 2-opt          | Restart rápido           |
+| 5    | nearest          | 2-opt          | Restart de qualidade     |
+| 6    | cheapest         | 2-opt          | Restart alta qualidade   |
+| 7    | nearest          | Lin-Kernighan  | Restart + intensificação |
 
 **Tipos de perturbação:**
 - **Leves** (`two_swap`, `segment_reverse`): modificam levemente a solução atual
 - **Destrutivas** (`random`, `nearest`, `cheapest`): ignoram a solução atual e constroem uma nova do zero
 
-Isso permite que o agente decida quando vale a pena manter a estrutura da solução atual (perturbação leve) ou recomeçar de uma nova solução (perturbação destrutiva/construtivo).
+**Buscas locais:**
+- **2-opt**: O(n²), rápido e eficiente
+- **Lin-Kernighan**: Cadeias de 2-opt (depth=2), mais intensivo
 
 ## Estrutura do Projeto
 
@@ -71,23 +66,24 @@ TSP-RL/
 ├── instance.py               # Carga de instâncias TSP
 ├── solution.py               # Representação de soluções
 ├── constructive_heuristic.py # Random, Nearest Neighbor, Cheapest Insertion
-├── local_search.py           # 2-opt, 3-opt, Lin-Kernighan
+├── local_search.py           # 2-opt, Lin-Kernighan
 ├── perturbation.py           # Perturbações para ILS
+├── scripts/
+│   └── generate_splits.py    # Gera splits train/test reprodutíveis
 ├── utils/
 │   ├── mdp.py                # Construção do MDP a partir de transições
 │   ├── transition.py         # Carga de arquivos de transição
 │   ├── q_learning/
 │   │   ├── single.py         # Single Q-Learning (iteração de valor)
-│   │   ├── double.py         # Double Q-Learning
 │   │   └── table.py          # Classe QTable
 │   └── plot.py               # Visualizações
 ├── data/
 │   ├── EUC_2D.json           # Instâncias euclidianas
 │   ├── ATT.json              # Instâncias ATT
 │   ├── GEO.json              # Instâncias geográficas
-│   ├── splits.json           # Divisão treino/teste
+│   ├── splits.json           # Divisão treino/teste (90/10, seed=42)
 │   ├── q_tables/             # Q-tables treinadas
-│   └── train/                # Dados de transição
+│   └── train/                # Dados de transição (gitignored)
 └── etc/
     ├── plantuml/             # Diagramas do framework
     └── slides/               # Apresentação
@@ -111,7 +107,7 @@ python experimentRun.py \
 Constrói o MDP a partir das transições e treina via Q-Learning:
 
 ```bash
-python -m utils.q_learning.single
+python -m utils.q_learning.single --types EUC_2D --sizes 10 20 30
 ```
 
 ### 3. Avaliação
@@ -133,8 +129,7 @@ python main.py
 ### Buscas Locais
 
 - **2-opt**: troca 2 arestas; O(n²) por iteração
-- **3-opt**: troca 3 arestas; mais lento, mais potente
-- **Lin-Kernighan**: cadeias de movimentos de profundidade variável
+- **Lin-Kernighan**: cadeias de 2-opt com profundidade limitada (depth=2)
 
 ### Perturbações
 
@@ -168,16 +163,15 @@ print(f"Custo: {best_solution.cost}")
 print(f"Gap: {((best_solution.cost - opt_cost) / opt_cost) * 100:.2f}%")
 ```
 
-## Compatibilidade
+## Split de Dados
 
-Para usar Q-tables treinadas no formato antigo (9 ações), use a classe `Q_ILS_Legacy`:
+O split train/test usa seed=42 para reprodutibilidade e compatibilidade com outros grupos:
 
-```python
-from Q_learning_ILS import Q_ILS_Legacy
-
-q_ils = Q_ILS_Legacy(problem)
-q_ils.load_qtable("data/q_tables/EUC_2D/instance_size_50.txt")
+```bash
+python scripts/generate_splits.py --seed 42 --train_ratio 0.9
 ```
+
+Resultado: 90% treino, 10% teste (1111 instâncias de teste por tipo).
 
 ## Referências
 
