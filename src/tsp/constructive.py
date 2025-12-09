@@ -3,148 +3,146 @@
 from __future__ import annotations
 
 import random
-from typing import List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 from src.tsp.instance import TSPInstance
 
 
-class ConstructiveHeuristic:
+def random_tour(problem: TSPInstance) -> Tuple[List[int], float]:
     """
-    Constructive heuristics for generating initial TSP tours.
+    Generate a random tour.
 
-    Implements:
-        - Random: Shuffled tour.
-        - Nearest Neighbor: Greedy construction.
-        - Cheapest Insertion: Minimum cost insertion.
+    Args:
+        problem: TSP instance.
+
+    Returns:
+        Tuple of (closed_tour, cost).
     """
+    nodes = list(problem.get_nodes())
+    n = len(nodes)
 
-    def random_tour(self, problem: TSPInstance) -> Tuple[List[int], float]:
-        """
-        Generate a random tour.
+    random.shuffle(nodes)
 
-        Args:
-            problem: TSP instance.
+    # Compute cost
+    tour_cost = 0.0
+    for i in range(n):
+        curr = nodes[i]
+        nxt = nodes[(i + 1) % n]
+        tour_cost += problem.get_weight(curr, nxt)
 
-        Returns:
-            Tuple of (closed_tour, cost).
-        """
-        nodes = list(problem.get_nodes())
-        n = len(nodes)
+    # Close the tour
+    closed_tour = nodes + [nodes[0]]
 
-        random.shuffle(nodes)
+    return closed_tour, tour_cost
 
-        # Compute cost
-        tour_cost = 0.0
-        for i in range(n):
-            curr = nodes[i]
-            nxt = nodes[(i + 1) % n]
-            tour_cost += problem.get_weight(curr, nxt)
 
-        # Close the tour
-        closed_tour = nodes + [nodes[0]]
+def nearest_neighbor(
+    problem: TSPInstance,
+    start_node: int | None = None,
+) -> Tuple[List[int], float]:
+    """
+    Generate tour using nearest neighbor heuristic.
 
-        return closed_tour, tour_cost
+    Args:
+        problem: TSP instance.
+        start_node: Starting node (random if None).
 
-    def nearest_neighbor(
-        self,
-        problem: TSPInstance,
-        start_node: int | None = None,
-    ) -> Tuple[List[int], float]:
-        """
-        Generate tour using nearest neighbor heuristic.
+    Returns:
+        Tuple of (closed_tour, cost).
+    """
+    n = problem.dimension
+    if start_node is None:
+        start_node = random.choice(list(problem.get_nodes()))
 
-        Args:
-            problem: TSP instance.
-            start_node: Starting node (random if None).
+    unvisited = set(problem.get_nodes())
+    unvisited.remove(start_node)
 
-        Returns:
-            Tuple of (closed_tour, cost).
-        """
-        n = problem.dimension
-        if start_node is None:
-            start_node = random.choice(list(problem.get_nodes()))
+    tour = [start_node]
+    current_node = start_node
+    tour_cost = 0.0
 
-        unvisited = set(problem.get_nodes())
-        unvisited.remove(start_node)
+    while unvisited:
+        next_node = min(unvisited, key=lambda node: problem.get_weight(current_node, node))
+        tour_cost += problem.get_weight(current_node, next_node)
+        tour.append(next_node)
+        unvisited.remove(next_node)
+        current_node = next_node
 
-        tour = [start_node]
-        current_node = start_node
-        tour_cost = 0.0
+    # Return to start
+    tour_cost += problem.get_weight(current_node, start_node)
+    tour.append(start_node)
 
-        while unvisited:
-            next_node = min(unvisited, key=lambda node: problem.get_weight(current_node, node))
-            tour_cost += problem.get_weight(current_node, next_node)
-            tour.append(next_node)
-            unvisited.remove(next_node)
-            current_node = next_node
+    return tour, tour_cost
 
-        # Return to start
-        tour_cost += problem.get_weight(current_node, start_node)
-        tour.append(start_node)
 
-        return tour, tour_cost
+def cheapest_insertion(
+    problem: TSPInstance,
+    start_node: int | None = None,
+) -> Tuple[List[int], float]:
+    """
+    Generate tour using cheapest insertion heuristic.
 
-    def cheapest_insertion(
-        self,
-        problem: TSPInstance,
-        start_node: int | None = None,
-    ) -> Tuple[List[int], float]:
-        """
-        Generate tour using cheapest insertion heuristic.
+    Starts with a 2-node cycle and iteratively inserts the node
+    that causes minimum cost increase.
 
-        Starts with a 2-node cycle and iteratively inserts the node
-        that causes minimum cost increase.
+    Args:
+        problem: TSP instance.
+        start_node: Starting node (random if None).
 
-        Args:
-            problem: TSP instance.
-            start_node: Starting node (random if None).
+    Returns:
+        Tuple of (closed_tour, cost).
+    """
+    nodes = list(problem.get_nodes())
+    n = len(nodes)
 
-        Returns:
-            Tuple of (closed_tour, cost).
-        """
-        nodes = list(problem.get_nodes())
-        n = len(nodes)
+    if n <= 2:
+        return random_tour(problem)
 
-        if n <= 2:
-            return self.random_tour(problem)
+    if start_node is None:
+        start_node = random.choice(nodes)
 
-        if start_node is None:
-            start_node = random.choice(nodes)
+    unvisited = set(nodes)
+    unvisited.remove(start_node)
 
-        unvisited = set(nodes)
-        unvisited.remove(start_node)
+    # Find nearest neighbor to start initial cycle
+    nearest = min(unvisited, key=lambda node: problem.get_weight(start_node, node))
+    unvisited.remove(nearest)
 
-        # Find nearest neighbor to start initial cycle
-        nearest = min(unvisited, key=lambda node: problem.get_weight(start_node, node))
-        unvisited.remove(nearest)
+    # Initial closed tour: start -> nearest -> start
+    tour = [start_node, nearest, start_node]
+    tour_cost = problem.get_weight(start_node, nearest) + problem.get_weight(nearest, start_node)
 
-        # Initial closed tour: start -> nearest -> start
-        tour = [start_node, nearest, start_node]
-        tour_cost = problem.get_weight(start_node, nearest) + problem.get_weight(nearest, start_node)
+    # Insert remaining nodes by minimum cost increase
+    while unvisited:
+        best_delta = float("inf")
+        best_city = None
+        best_pos = None
 
-        # Insert remaining nodes by minimum cost increase
-        while unvisited:
-            best_delta = float("inf")
-            best_city = None
-            best_pos = None
+        for city in unvisited:
+            for i in range(len(tour) - 1):
+                a, b = tour[i], tour[i + 1]
+                delta = problem.get_weight(a, city) + problem.get_weight(city, b) - problem.get_weight(a, b)
 
-            for city in unvisited:
-                for i in range(len(tour) - 1):
-                    a, b = tour[i], tour[i + 1]
-                    delta = problem.get_weight(a, city) + problem.get_weight(city, b) - problem.get_weight(a, b)
+                if delta < best_delta:
+                    best_delta = delta
+                    best_city = city
+                    best_pos = i
 
-                    if delta < best_delta:
-                        best_delta = delta
-                        best_city = city
-                        best_pos = i
+        tour.insert(best_pos + 1, best_city)
+        tour_cost += best_delta
+        unvisited.remove(best_city)
 
-            tour.insert(best_pos + 1, best_city)
-            tour_cost += best_delta
-            unvisited.remove(best_city)
+    # Ensure closed tour
+    if tour[0] != tour[-1]:
+        tour.append(tour[0])
+        tour_cost += problem.get_weight(tour[-2], tour[-1])
 
-        # Ensure closed tour
-        if tour[0] != tour[-1]:
-            tour.append(tour[0])
-            tour_cost += problem.get_weight(tour[-2], tour[-1])
+    return tour, tour_cost
 
-        return tour, tour_cost
+
+# Registry: constructive heuristic name -> function
+CONSTRUCTIVES: Dict[str, Callable[[TSPInstance], Tuple[List[int], float]]] = {
+    "random": random_tour,
+    "nearest": nearest_neighbor,
+    "cheapest": cheapest_insertion,
+}

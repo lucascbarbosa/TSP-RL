@@ -10,10 +10,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 
-from src.tsp.constructive import ConstructiveHeuristic
+from src.tsp.constructive import CONSTRUCTIVES
 from src.tsp.instance import TSPInstance
-from src.tsp.local_search import LocalSearch
-from src.tsp.perturbation import Perturbation
+from src.tsp.local_search import LOCAL_SEARCHES, two_opt
+from src.tsp.perturbation import PERTURBATIONS
 from src.tsp.solution import Solution
 from src.rl.q_table import QTable
 
@@ -103,8 +103,6 @@ class QILS:
 
         self.problem = problem
         self.dist_matrix = dist_matrix
-        self.constructive = ConstructiveHeuristic()
-        self.local_search = LocalSearch()
 
         self.n_states = N_STATES
         self.n_actions = N_ACTIONS
@@ -188,21 +186,16 @@ class QILS:
         Returns:
             Perturbed solution.
         """
-        if pert_type == "two_swap":
-            return Perturbation.two_swap(solution)
-        elif pert_type == "segment_reverse":
-            return Perturbation.segment_reverse(solution)
-        elif pert_type == "random":
-            tour, _ = self.constructive.random_tour(self.problem)
+        # Light perturbations (modify existing solution)
+        if pert_type in PERTURBATIONS:
+            return PERTURBATIONS[pert_type](solution)
+
+        # Destructive perturbations (rebuild from scratch using constructive)
+        if pert_type in CONSTRUCTIVES:
+            tour, _ = CONSTRUCTIVES[pert_type](self.problem)
             return Solution(tour, self.dist_matrix, is_closed=True)
-        elif pert_type == "nearest":
-            tour, _ = self.constructive.nearest_neighbor(self.problem)
-            return Solution(tour, self.dist_matrix, is_closed=True)
-        elif pert_type == "cheapest":
-            tour, _ = self.constructive.cheapest_insertion(self.problem)
-            return Solution(tour, self.dist_matrix, is_closed=True)
-        else:
-            raise ValueError(f"Unknown perturbation type: {pert_type}")
+
+        raise ValueError(f"Unknown perturbation type: {pert_type}")
 
     def _apply_local_search(self, solution: Solution, ls_type: str) -> Solution:
         """
@@ -215,12 +208,9 @@ class QILS:
         Returns:
             Improved solution.
         """
-        if ls_type == "two_opt":
-            return self.local_search.two_opt(solution)
-        elif ls_type == "lin_kernighan":
-            return self.local_search.lin_kernighan(solution)
-        else:
+        if ls_type not in LOCAL_SEARCHES:
             raise ValueError(f"Unknown local search type: {ls_type}")
+        return LOCAL_SEARCHES[ls_type](solution)
 
     def _get_initial_solution(self) -> Solution:
         """
@@ -229,17 +219,10 @@ class QILS:
         Returns:
             Initial solution improved by 2-opt.
         """
-        constructive_choice = random.choice(["random", "nearest", "cheapest"])
-
-        if constructive_choice == "random":
-            tour, _ = self.constructive.random_tour(self.problem)
-        elif constructive_choice == "nearest":
-            tour, _ = self.constructive.nearest_neighbor(self.problem)
-        else:
-            tour, _ = self.constructive.cheapest_insertion(self.problem)
-
+        constructive_choice = random.choice(list(CONSTRUCTIVES.keys()))
+        tour, _ = CONSTRUCTIVES[constructive_choice](self.problem)
         initial_solution = Solution(tour, self.dist_matrix, is_closed=True)
-        return self.local_search.two_opt(initial_solution)
+        return two_opt(initial_solution)
 
     def generate_transitions(
         self,

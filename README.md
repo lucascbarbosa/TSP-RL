@@ -64,11 +64,11 @@ TSP-RL/
 │   ├── tsp/                     # Componentes core do TSP
 │   │   ├── solution.py          # Representação de soluções
 │   │   ├── instance.py          # TSPInstance, TSPDataset
-│   │   ├── local_search.py      # 2-opt, Lin-Kernighan
-│   │   ├── perturbation.py      # Perturbações para ILS
-│   │   └── constructive.py      # Heurísticas construtivas
+│   │   ├── local_search.py      # two_opt(), lin_kernighan() + LOCAL_SEARCHES
+│   │   ├── perturbation.py      # two_swap(), segment_reverse() + PERTURBATIONS
+│   │   └── constructive.py      # random_tour(), nearest_neighbor(), cheapest_insertion() + CONSTRUCTIVES
 │   ├── ils/                     # Framework ILS
-│   │   └── q_ils.py             # Classe QILS principal
+│   │   └── q_ils.py             # QILS, State, Action, N_STATES, N_ACTIONS
 │   └── rl/                      # Reinforcement Learning
 │       ├── q_table.py           # Classe QTable
 │       ├── q_learning.py        # Q-Learning (value iteration)
@@ -100,10 +100,7 @@ TSP-RL/
 Executa ILS com escolhas aleatórias de (perturbação, busca local), registrando tuplas `(s, a, r, s')`:
 
 ```bash
-python scripts/train_transitions.py \
-    --split_path data/splits.json \
-    --dataset_path data/EUC_2D.json \
-    --output_dir data/train/EUC_2D
+python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/EUC_2D.json --output_dir data/train/EUC_2D
 ```
 
 ### 2. Treinamento da Q-table
@@ -124,18 +121,20 @@ python scripts/evaluate.py --types EUC_2D GEO ATT
 
 ## Componentes
 
-### Heurísticas Construtivas
+Os operadores são funções standalone com registros `Dict[str, Callable]` para acesso dinâmico:
 
-- **Random**: tour aleatório
-- **Nearest Neighbor**: adiciona sempre a cidade mais próxima
-- **Cheapest Insertion**: insere na posição de menor aumento de custo
+### Heurísticas Construtivas (`CONSTRUCTIVES`)
 
-### Buscas Locais
+- **random**: tour aleatório
+- **nearest**: adiciona sempre a cidade mais próxima
+- **cheapest**: insere na posição de menor aumento de custo
 
-- **2-opt**: troca 2 arestas; O(n²) por iteração
-- **Lin-Kernighan**: cadeias de 2-opt com profundidade limitada (depth=2)
+### Buscas Locais (`LOCAL_SEARCHES`)
 
-### Perturbações
+- **two_opt**: troca 2 arestas; O(n²) por iteração
+- **lin_kernighan**: cadeias de 2-opt com profundidade limitada (depth=2)
+
+### Perturbações (`PERTURBATIONS`)
 
 - **two_swap**: troca dois vértices aleatórios
 - **segment_reverse**: reverte um segmento aleatório do tour
@@ -164,6 +163,24 @@ best_solution = solver.run(max_iter=50, opt_cost=opt_cost, epsilon=0.1)
 
 print(f"Custo: {best_solution.cost}")
 print(f"Gap: {((best_solution.cost - opt_cost) / opt_cost) * 100:.2f}%")
+```
+
+### Usando os Registros Diretamente
+
+```python
+from src import LOCAL_SEARCHES, PERTURBATIONS, CONSTRUCTIVES, N_STATES, N_ACTIONS
+
+# Número de operadores disponíveis
+print(f"Buscas locais: {len(LOCAL_SEARCHES)}")      # 2
+print(f"Perturbações: {len(PERTURBATIONS)}")        # 2
+print(f"Construtivas: {len(CONSTRUCTIVES)}")        # 3
+print(f"Estados: {N_STATES}, Ações: {N_ACTIONS}")   # 5, 8
+
+# Chamar operadores pelo nome
+from src import Solution
+tour, cost = CONSTRUCTIVES["nearest"](problem)
+solution = Solution(tour, dist_matrix, is_closed=True)
+improved = LOCAL_SEARCHES["two_opt"](solution)
 ```
 
 ## Split de Dados
