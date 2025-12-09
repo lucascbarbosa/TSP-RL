@@ -19,6 +19,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +28,50 @@ from typing import Any, Dict, List, Set, Tuple
 
 from src.tsp.instance import TSPInstance
 from src.ils.q_ils import QILS
+
+
+def get_available_sizes(instance_type: str) -> Set[int]:
+    """
+    Detect available Q-table sizes for a given instance type.
+
+    Args:
+        instance_type: Instance type (e.g., 'EUC_2D').
+
+    Returns:
+        Set of available instance sizes (dimensions).
+    """
+    q_tables_dir = Path(f"data/q_tables/{instance_type}")
+    if not q_tables_dir.exists():
+        return set()
+
+    sizes: Set[int] = set()
+    for f in q_tables_dir.glob("instance_size_*.txt"):
+        match = re.search(r"instance_size_(\d+)\.txt", f.name)
+        if match:
+            sizes.add(int(match.group(1)))
+    return sizes
+
+
+def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[int, int]:
+    """
+    Get dimensions for specific instances from dataset.
+
+    Args:
+        dataset_path: Path to dataset JSON file.
+        instance_ids: List of instance IDs to check.
+
+    Returns:
+        Dict mapping instance_id -> dimension.
+    """
+    with open(dataset_path, "r") as f:
+        data = json.load(f)
+
+    dimensions: Dict[int, int] = {}
+    for idx in instance_ids:
+        if 0 <= idx < len(data):
+            dimensions[idx] = len(data[idx]["coords"])
+    return dimensions
+
 
 # Configuration
 DEFAULT_OUTPUT = "results.csv"
@@ -85,11 +130,6 @@ def process_instance(args: Tuple[int, str, str, int, float]) -> None:
         # Setup Q-ILS solver
         solver = QILS(problem)
         q_table_path = f"data/q_tables/{instance_type}/instance_size_{problem.dimension:02d}.txt"
-
-        if not os.path.exists(q_table_path):
-            print(f"SKIP: {instance_type}{instance_id} - Q-table not found: {q_table_path}")
-            return
-
         solver.load_q_table(q_table_path)
 
         # Run Q-ILS
@@ -188,15 +228,35 @@ def main() -> None:
             print(f"Warning: No splits found for {instance_type}")
             continue
 
+        # Detect available Q-table sizes for this type
+        available_sizes = get_available_sizes(instance_type)
+        if not available_sizes:
+            print(f"Warning: No Q-tables found for {instance_type}, skipping...")
+            continue
+
         test_instances = splits[key]["test"]
 
+        # Get dimensions for all test instances
+        dataset_path = f"data/{instance_type}.json"
+        dimensions = get_instance_dimensions(dataset_path, test_instances)
+
+        # Filter to instances with available Q-tables
+        filtered_count = 0
         for instance_id in test_instances:
             full_id = f"{instance_type}{instance_id}"
 
             if full_id in processed:
                 continue
 
+            dim = dimensions.get(instance_id)
+            if dim is None or dim not in available_sizes:
+                filtered_count += 1
+                continue
+
             jobs.append((instance_id, instance_type, args.output, args.max_iter, args.epsilon))
+
+        if filtered_count > 0:
+            print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
 
     print(f"Starting evaluation of {len(jobs)} instances with {args.workers} threads...")
 
