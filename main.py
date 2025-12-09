@@ -19,27 +19,29 @@ MAX_WORKERS = 10
 # Create a lock object to synchronize file writing
 csv_lock = threading.Lock()
 
+
 def get_processed_instances(filename):
     processed = set()
     if os.path.exists(filename):
-        with open(filename, mode='r', newline='') as file:
+        with open(filename, mode="r", newline="") as file:
             reader = csv.reader(file)
-            next(reader, None) # Skip header
+            next(reader, None)  # Skip header
             for row in reader:
                 if row:
                     # Assuming full_id is in the first column (index 0)
-                    processed.add(row[0]) 
+                    processed.add(row[0])
     return processed
+
 
 def initialize_csv(filename):
     """Creates the CSV and writes the header if it doesn't exist."""
     if not os.path.isfile(filename):
-        with open(filename, mode='w', newline='') as file:
+        with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow([
-                "Full ID", "Name", "ID", "Type", "Dimension", 
-                "Optimal Cost", "Best Cost", "Gap", "Time", "Best Tour"
-            ])
+            writer.writerow(
+                ["Full ID", "Name", "ID", "Type", "Dimension", "Optimal Cost", "Best Cost", "Gap", "Time", "Best Tour"]
+            )
+
 
 def process_instance(args):
     """
@@ -55,10 +57,7 @@ def process_instance(args):
 
         # Calculate optimal cost
         opt_tour = problem.opt_tour
-        opt_cost = sum(
-            problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)])
-            for i in range(len(opt_tour))
-        )
+        opt_cost = sum(problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
 
         # Setup ILS
         q_ils = Q_ILS(problem)
@@ -84,16 +83,16 @@ def process_instance(args):
             best_solution_q.cost,
             f"{gap_value:.4f}%",
             execTime,
-            str(best_solution_q.tour)
+            str(best_solution_q.tour),
         ]
 
         # --- CRITICAL SECTION: WRITE TO FILE ---
         # We lock this block so threads don't write over each other
         with csv_lock:
-            with open(output_filename, mode='a', newline='') as file:
+            with open(output_filename, mode="a", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerow(row_data)
-        
+
         # Print status (print is thread-safe, but output might interleave slightly)
         print(f"DONE: {full_id} | Gap: {gap_value:.2f}% | Time: {execTime:.2f}s")
 
@@ -105,24 +104,25 @@ def process_instance(args):
 if __name__ == "__main__":
     # 1. Load config and history
     processed = get_processed_instances(output_filename)
-    initialize_csv(output_filename) # Ensure header exists before threads start
+    initialize_csv(output_filename)  # Ensure header exists before threads start
 
     with open("data/splits.json", "r") as f:
         splits = json.load(f)
 
     # 2. Build the list of jobs (Todo List)
     jobs = []
-    
-    for instance_type in ["EUC_2D", "GEO", "ATT"]:
+
+    # @TODO add "EUC_2D" ?
+    for instance_type in ["GEO", "ATT"]:
         eval_instances = splits[f"data/{instance_type}.json"]["test"]
-        
+
         for instance in eval_instances:
             full_id = f"{instance_type}{instance}"
-            
+
             # Skip if already done
             if full_id in processed:
                 continue
-            
+
             # Add to job list
             jobs.append((instance, instance_type, splits))
 

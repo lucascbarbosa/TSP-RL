@@ -1,15 +1,16 @@
 """Transition file utilities."""
+
 import os
 import numpy as np
 import torch
 from typing import Tuple
 import re
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def load_transition_from_paths(
-    paths: list,
-    return_torch: bool = False
+    paths: list, return_torch: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
     """
     Load all transition files from a folder and aggregate them into a single MDP.
@@ -20,21 +21,21 @@ def load_transition_from_paths(
     # 1. Iterate over files and load raw data
     # Sort ensures deterministic order, though not strictly necessary for MDPs
     for file_path in sorted(paths):
-            try:
-                # Load the raw matrix
-                data = np.loadtxt(file_path)
-                
-                # Handle case where file might be a single row (1D array)
-                if len(data.shape) == 1:
-                    data = data.reshape(1, -1)
-                
-                # Verify shape is correct (needs at least 4 columns: S, A, R, S')
-                if data.shape[1] >= 4:
-                    matrix_list.append(data)
-                else:
-                    print(f"Warning: Skipping {file_path}, invalid shape {data.shape}")
-            except Exception as e:
-                print(f"Error loading {file_path}: {e}")
+        try:
+            # Load the raw matrix
+            data = np.loadtxt(file_path)
+
+            # Handle case where file might be a single row (1D array)
+            if len(data.shape) == 1:
+                data = data.reshape(1, -1)
+
+            # Verify shape is correct (needs at least 4 columns: S, A, R, S')
+            if data.shape[1] >= 4:
+                matrix_list.append(data)
+            else:
+                print(f"Warning: Skipping {file_path}, invalid shape {data.shape}")
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
 
     if not matrix_list:
         raise ValueError(f"No valid transition files found in paths")
@@ -64,10 +65,9 @@ def load_transition_from_paths(
 
     return current_states, actions, rewards, next_states, int(n_states), int(n_actions)
 
+
 def load_transition_folder(
-    transition_folder: str,
-    return_torch: bool = False, 
-    filter:str = r".*"
+    transition_folder: str, return_torch: bool = False, filter: str = r".*"
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
     """
     Load all transition files from a folder and aggregate them into a single MDP.
@@ -78,17 +78,17 @@ def load_transition_folder(
     # 1. Iterate over files and load raw data
     # Sort ensures deterministic order, though not strictly necessary for MDPs
     for filename in sorted(os.listdir(transition_folder)):
-        
-        if re.search(filter, filename) and filename.endswith(".txt"): 
+
+        if re.search(filter, filename) and filename.endswith(".txt"):
             file_path = os.path.join(transition_folder, filename)
             try:
                 # Load the raw matrix
                 data = np.loadtxt(file_path)
-                
+
                 # Handle case where file might be a single row (1D array)
                 if len(data.shape) == 1:
                     data = data.reshape(1, -1)
-                
+
                 # Verify shape is correct (needs at least 4 columns: S, A, R, S')
                 if data.shape[1] >= 4:
                     matrix_list.append(data)
@@ -125,9 +125,9 @@ def load_transition_folder(
 
     return current_states, actions, rewards, next_states, int(n_states), int(n_actions)
 
+
 def load_transition_file(
-    transition_filename: str,
-    return_torch: bool = False
+    transition_filename: str, return_torch: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int, int]:
     """Load transition file and extract data."""
     # Read transition matrix

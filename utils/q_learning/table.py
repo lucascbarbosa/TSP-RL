@@ -1,14 +1,16 @@
 """Q Table class."""
+
 import numpy as np
 import torch
 from typing import Dict, List
 from utils.mdp import build_mdp_model
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class QTable:
     """Classic Q Table class."""
+
     def __init__(
         self,
         n_states: int,
@@ -48,21 +50,19 @@ class QTable:
         policy[self.table != best_actions] = prob_greedy
         return policy
 
-    def decay_epsilon(
-        self, factor: float = 0.995, min_epsilon: float = 0.01
-    ) -> None:
+    def decay_epsilon(self, factor: float = 0.995, min_epsilon: float = 0.01) -> None:
         """Decay exploration rate."""
         self.epsilon = max(min_epsilon, self.epsilon * factor)
 
     def to_txt(self, filename: str) -> None:
         """Save Q-Table to text file."""
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             # Write header line with n_states and n_actions
             f.write(f"{self.n_states} {self.n_actions}\n")
             # Write Q-table matrix with space-separated values
-            np.savetxt(f, self.table.cpu().numpy(), delimiter=' ', fmt='%g')
+            np.savetxt(f, self.table.cpu().numpy(), delimiter=" ", fmt="%g")
 
-    def copy(self) -> 'QTable':
+    def copy(self) -> "QTable":
         """Copy Q-Table."""
         return QTable(
             n_states=self.n_states,
@@ -79,7 +79,7 @@ class QTable:
         max_steps: int = 1000,
     ) -> Dict[str, List]:
         """Run rollout simulations using the policy."""
-        history = {'rewards': [], 'length': []}
+        history = {"rewards": [], "length": []}
         mdp = build_mdp_model(transition_filename)
         P = mdp.transition_matrix
         R = mdp.reward_matrix
@@ -101,6 +101,6 @@ class QTable:
                 if state == self.n_states - 1:
                     break
 
-            history['length'].append(step + 1)
-            history['rewards'].append(total_reward)
+            history["length"].append(step + 1)
+            history["rewards"].append(total_reward)
         return history

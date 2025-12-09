@@ -35,9 +35,7 @@ class ConstructiveHeuristic:
         tour_cost = 0.0
 
         while unvisited:
-            next_node = min(
-                unvisited, key=lambda node: problem.get_weight(current_node, node)
-            )
+            next_node = min(unvisited, key=lambda node: problem.get_weight(current_node, node))
             tour_cost += problem.get_weight(current_node, next_node)
             tour.append(next_node)
             unvisited.remove(next_node)
@@ -84,9 +82,7 @@ class ConstructiveHeuristic:
 
         # Tour inicial fechado: start -> nearest -> start
         tour = [start_node, nearest, start_node]
-        tour_cost = problem.get_weight(start_node, nearest) + problem.get_weight(
-            nearest, start_node
-        )
+        tour_cost = problem.get_weight(start_node, nearest) + problem.get_weight(nearest, start_node)
 
         # Enquanto existirem nós não visitados, insere sempre pelo menor aumento de custo
         while unvisited:
@@ -100,11 +96,7 @@ class ConstructiveHeuristic:
                     a = tour[i]
                     b = tour[i + 1]
                     # aumento de custo ao inserir city entre a e b
-                    delta = (
-                        problem.get_weight(a, city)
-                        + problem.get_weight(city, b)
-                        - problem.get_weight(a, b)
-                    )
+                    delta = problem.get_weight(a, city) + problem.get_weight(city, b) - problem.get_weight(a, b)
 
                     if delta < best_delta:
                         best_delta = delta

@@ -2,6 +2,7 @@ import json
 import numpy as np
 import math
 
+
 class RandomTSPInstance:
     """
     Leitor de instâncias TSP geradas aleatoriamente no formato JSON,
@@ -12,9 +13,10 @@ class RandomTSPInstance:
         instance_id = qual instância carregar dentro do JSON
         num_cities  = número de cidades a usar (None = todas)
     """
+
     def __init__(self, path, instance_id=0, num_cities=None, preloaded_data=None):
-        
-        # MODIFICATION: If data is already in memory, use it. 
+
+        # MODIFICATION: If data is already in memory, use it.
         # Otherwise, read from file (old behavior).
         if preloaded_data is not None:
             data = preloaded_data
@@ -68,7 +70,7 @@ class TSPDataset:
         """
         self.path = json_file_path
         self.indices = active_indices
-        
+
         print(f"Loading {json_file_path} into memory...")
         with open(json_file_path, "r") as f:
             # We load the WHOLE list of dicts into memory once
@@ -84,14 +86,10 @@ class TSPDataset:
         """
         # 1. Get the real ID from your subset of indices
         real_instance_id = self.indices[idx]
-        
+
         # 2. Create the object using the preloaded data
         # We pass 'self.path' just to satisfy the signature, but 'preloaded_data' does the work.
-        instance = RandomTSPInstance(
-            path=self.path, 
-            instance_id=real_instance_id, 
-            preloaded_data=self.data_in_memory
-        )
+        instance = RandomTSPInstance(path=self.path, instance_id=real_instance_id, preloaded_data=self.data_in_memory)
         return instance
 
     def __iter__(self):
