@@ -13,11 +13,11 @@ class Q_ILS:
     Framework Q-ILS: ILS onde um agente RL decide qual par (perturbação, busca local)
     aplicar a cada iteração, em função do estado atual (gap percentual).
 
-    O espaço de ações inclui:
-    - Perturbações leves: two_swap, segment_reverse
-    - Perturbações destrutivas (construtivos): random, nearest, cheapest
+    Perturbações:
+    - Leves: two_swap, segment_reverse
+    - Destrutivas (construtivos): random, nearest, cheapest
 
-    Combinadas com buscas locais: 2-opt, 3-opt, Lin-Kernighan
+    Buscas locais: 2-opt, Lin-Kernighan (simplificado, depth=2)
     """
 
     def __init__(self, problem):
@@ -31,33 +31,19 @@ class Q_ILS:
         self.constructive = constructive_heuristic.ConstructiveHeuristic()
         self.local_search = local_search.LocalSearch()
 
-        # Novo mapeamento de ações: (perturbação, busca local)
-        # Perturbações:
-        #   - "two_swap": perturbação leve (troca 2 vértices)
-        #   - "segment_reverse": perturbação média (reverte segmento)
-        #   - "random": perturbação destrutiva (ignora solução atual)
-        #   - "nearest": perturbação destrutiva (ignora solução atual)
-        #   - "cheapest": perturbação destrutiva (ignora solução atual)
-        # Buscas locais: "two_opt", "three_opt", "lin_kernighan"
-
+        # Mapeamento de ações: (perturbação, busca local)
+        # 8 ações = 5 perturbações × 2 buscas locais (com algumas omissões)
         self.action_map = {
-            # Perturbações leves + buscas locais
+            # Perturbações leves
             ("two_swap", "two_opt"): 0,
-            ("two_swap", "three_opt"): 1,
-            ("two_swap", "lin_kernighan"): 2,
-            ("segment_reverse", "two_opt"): 3,
-            ("segment_reverse", "three_opt"): 4,
-            ("segment_reverse", "lin_kernighan"): 5,
-            # Perturbações destrutivas (construtivos) + buscas locais
-            ("random", "two_opt"): 6,
-            ("random", "three_opt"): 7,
-            ("random", "lin_kernighan"): 8,
-            ("nearest", "two_opt"): 9,
-            ("nearest", "three_opt"): 10,
-            ("nearest", "lin_kernighan"): 11,
-            ("cheapest", "two_opt"): 12,
-            ("cheapest", "three_opt"): 13,
-            ("cheapest", "lin_kernighan"): 14,
+            ("two_swap", "lin_kernighan"): 1,
+            ("segment_reverse", "two_opt"): 2,
+            ("segment_reverse", "lin_kernighan"): 3,
+            # Perturbações destrutivas (construtivos)
+            ("random", "two_opt"): 4,
+            ("nearest", "two_opt"): 5,
+            ("cheapest", "two_opt"): 6,
+            ("nearest", "lin_kernighan"): 7,
         }
 
         # Mapeamento inverso para decodificar ações
@@ -75,9 +61,7 @@ class Q_ILS:
         with open(path, "r") as f:
             header = f.readline().strip().split()
             if len(header) != 2:
-                raise ValueError(
-                    "Cabeçalho da Q-table inválido (esperado: 'n_states n_actions')."
-                )
+                raise ValueError("Cabeçalho da Q-table inválido (esperado: 'n_states n_actions').")
 
             n_states, n_actions = map(int, header)
 
@@ -88,9 +72,7 @@ class Q_ILS:
                     raise ValueError("Número de linhas da Q-table menor que n_states.")
                 row_vals = list(map(float, line.strip().split()))
                 if len(row_vals) != n_actions:
-                    raise ValueError(
-                        f"Linha {i+2} da Q-table tem {len(row_vals)} colunas, esperado {n_actions}."
-                    )
+                    raise ValueError(f"Linha {i+2} da Q-table tem {len(row_vals)} colunas, esperado {n_actions}.")
                 data.append(row_vals)
 
         self.qtable = np.array(data, dtype=float)
@@ -141,7 +123,7 @@ class Q_ILS:
         elif gap > 5 and gap <= 10:
             return 2, 25  # Regular
         elif gap > 10:
-            return 3, 0   # Ruim
+            return 3, 0  # Ruim
         elif gap < 0:
             return 4, 100  # Melhor que ótimo conhecido
 
@@ -172,8 +154,6 @@ class Q_ILS:
         """Aplica a busca local especificada à solução."""
         if ls_type == "two_opt":
             return self.local_search.two_opt(solution)
-        elif ls_type == "three_opt":
-            return self.local_search.three_opt(solution)
         elif ls_type == "lin_kernighan":
             return self.local_search.lin_kernighan(solution)
         else:
@@ -188,30 +168,31 @@ class Q_ILS:
         """
         # Solução inicial via construtivo aleatório
         constructive_choice = random.choice(["random", "nearest", "cheapest"])
-        tour, _ = getattr(self.constructive,
-                         {"random": "random_tour",
-                          "nearest": "nearest_neighbor_tour",
-                          "cheapest": "cheapest_insertion_tour"}[constructive_choice])(self.problem)
+        tour, _ = getattr(
+            self.constructive,
+            {"random": "random_tour", "nearest": "nearest_neighbor_tour", "cheapest": "cheapest_insertion_tour"}[
+                constructive_choice
+            ],
+        )(self.problem)
 
         initial_solution = Solution(tour, self.dist_matrix, is_closed=True)
 
         # Busca local inicial
-        ls_solution = self.local_search.three_opt(initial_solution)
+        ls_solution = self.local_search.two_opt(initial_solution)
         best_solution = ls_solution.copy()
 
         iter_wto_impr = 0
         output = ""
 
-        perturbation_choices = ["two_swap", "segment_reverse", "random", "nearest", "cheapest"]
-        local_search_choices = ["two_opt", "three_opt", "lin_kernighan"]
+        # Amostragem proporcional às ações disponíveis
+        action_list = list(self.action_map.keys())
 
         while iter_wto_impr < max_iter:
             # Estado antes da ação
             i_state, _ = self.get_state(ls_solution.cost, opt_cost)
 
-            # Escolha aleatória de perturbação e busca local
-            pert_choice = random.choice(perturbation_choices)
-            ls_choice = random.choice(local_search_choices)
+            # Escolha aleatória de uma ação válida
+            pert_choice, ls_choice = random.choice(action_list)
 
             # Aplica perturbação
             perturbed_solution = self._apply_perturbation(ls_solution, pert_choice)
@@ -272,7 +253,7 @@ class Q_ILS:
         initial_solution = Solution(tour, self.dist_matrix, is_closed=True)
 
         # Busca local inicial
-        ls_solution = self.local_search.three_opt(initial_solution)
+        ls_solution = self.local_search.two_opt(initial_solution)
         best_solution = ls_solution.copy()
 
         iter_wto_impr = 0
@@ -307,90 +288,6 @@ class Q_ILS:
             print(
                 f"[Q-ILS] state={i_state}, action={action} "
                 f"({pert_type} + {ls_type}) "
-                f"best_cost={best_solution.cost:.4f}"
-            )
-
-        return best_solution
-
-
-# Compatibilidade: manter mapeamento antigo para Q-tables existentes
-class Q_ILS_Legacy(Q_ILS):
-    """Versão compatível com Q-tables treinadas no formato antigo (9 ações)."""
-
-    def __init__(self, problem):
-        super().__init__(problem)
-
-        # Mapeamento antigo: (construtivo, busca local)
-        self.action_map = {
-            ("random", "two_opt"): 0,
-            ("random", "three_opt"): 1,
-            ("nearest", "two_opt"): 2,
-            ("nearest", "three_opt"): 3,
-            ("cheapest", "two_opt"): 4,
-            ("cheapest", "three_opt"): 5,
-            ("random", "lin_kernighan"): 6,
-            ("nearest", "lin_kernighan"): 7,
-            ("cheapest", "lin_kernighan"): 8,
-        }
-        self.action_decode = {v: k for k, v in self.action_map.items()}
-        self.n_actions = 9
-
-    def _apply_perturbation(self, solution: Solution, pert_type: str) -> Solution:
-        """No modo legado, perturbação = perturbação padrão, construtivo após."""
-        return perturbation.Perturbation.random_two_swap(solution)
-
-    def exec_q_table(self, max_iter: int = 50, opt_cost: float = None, epsilon: float = 0.0):
-        """Execução no modo legado (construtivo + busca local como no código original)."""
-        if opt_cost is None:
-            raise ValueError("opt_cost não pode ser None.")
-        if self.qtable is None:
-            raise ValueError("Q-table ainda não carregada.")
-
-        # Solução inicial
-        constructive_choice = random.choice(["random", "nearest", "cheapest"])
-        if constructive_choice == "random":
-            tour, _ = self.constructive.random_tour(self.problem)
-        elif constructive_choice == "nearest":
-            tour, _ = self.constructive.nearest_neighbor_tour(self.problem)
-        else:
-            tour, _ = self.constructive.cheapest_insertion_tour(self.problem)
-
-        initial_solution = Solution(tour, self.dist_matrix, is_closed=True)
-        ls_solution = self.local_search.three_opt(initial_solution)
-        best_solution = ls_solution.copy()
-
-        iter_wto_impr = 0
-
-        while iter_wto_impr < max_iter:
-            perturbed_solution = perturbation.Perturbation.random_two_swap(ls_solution)
-            i_state, _ = self.get_state(perturbed_solution.cost, opt_cost)
-
-            action = self.choose_action_from_q(i_state, epsilon=epsilon)
-            self.action = action
-
-            # Decodifica ação no formato antigo
-            if action in (0, 1, 6):
-                action_tag = "random"
-            elif action in (2, 3, 7):
-                action_tag = "nearest"
-            else:
-                action_tag = "cheapest"
-
-            if action % 3 == 0:
-                ls_solution = self.local_search.two_opt(perturbed_solution)
-            elif action % 3 == 1:
-                ls_solution = self.local_search.three_opt(perturbed_solution)
-            else:
-                ls_solution = self.local_search.lin_kernighan(perturbed_solution)
-
-            if ls_solution.cost < best_solution.cost:
-                best_solution = ls_solution.copy()
-                iter_wto_impr = 0
-            else:
-                iter_wto_impr += 1
-
-            print(
-                f"[Q-ILS-Legacy] state={i_state}, action={action} "
                 f"best_cost={best_solution.cost:.4f}"
             )
 

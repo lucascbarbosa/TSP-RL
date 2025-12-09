@@ -32,9 +32,7 @@ class LocalSearch:
                     # 2-opt: reversão do segmento [i, j-1]
                     new_tour[i:j] = reversed(best_tour[i:j])
 
-                    new_cost = Solution.compute_cost_static(
-                        new_tour, dist_matrix, is_closed=True
-                    )
+                    new_cost = Solution.compute_cost_static(new_tour, dist_matrix, is_closed=True)
 
                     if new_cost < best_cost:
                         best_tour = new_tour
@@ -43,95 +41,7 @@ class LocalSearch:
 
         return Solution(best_tour, dist_matrix, is_closed=True)
 
-    def three_opt(self, solution: Solution) -> Solution:
-        """
-        Busca local 3-opt sobre uma Solution (rota fechada).
-
-        Estratégia:
-        - Tour fechado: [c0, ..., c_{n-1}, c0]
-        - Escolhemos índices 1 <= i < j < k <= n-1 como pontos de corte.
-        - Quebramos o tour em quatro partes: A | B | C | D, onde:
-              A = tour[0:i]
-              B = tour[i:j]
-              C = tour[j:k]
-              D = tour[k:]
-          (note que D termina em c0)
-        - Geramos diversas recombinações 3-opt, avaliamos todas e aceitamos
-          a primeira melhora (first-improvement) em cada varredura.
-        """
-        best_tour = solution.tour[:]  # [c0, ..., c_{n-1}, c0]
-        best_cost = solution.cost
-        dist_matrix = solution.dist_matrix
-
-        # número de cidades reais (sem contar a repetição final)
-        n = len(best_tour) - 1
-
-        improved = True
-        while improved:
-            improved = False
-
-            # i, j, k são índices de corte na parte "interna" do tour
-            for i in range(1, n - 2):
-                for j in range(i + 1, n - 1):
-                    for k in range(j + 1, n):
-                        # segmentação
-                        A = best_tour[0:i]
-                        B = best_tour[i:j]
-                        C = best_tour[j:k]
-                        D = best_tour[k:]  # inclui o c0 final
-
-                        # Gera candidatos 3-opt (alguns são 2-opt, mas ok)
-                        candidates = []
-
-                        # 1) A + B^R + C + D
-                        candidates.append(A + B[::-1] + C + D)
-
-                        # 2) A + B + C^R + D
-                        candidates.append(A + B + C[::-1] + D)
-
-                        # 3) A + B^R + C^R + D
-                        candidates.append(A + B[::-1] + C[::-1] + D)
-
-                        # 4) A + C + B + D
-                        candidates.append(A + C + B + D)
-
-                        # 5) A + C^R + B + D
-                        candidates.append(A + C[::-1] + B + D)
-
-                        # 6) A + C + B^R + D
-                        candidates.append(A + C + B[::-1] + D)
-
-                        # 7) A + C^R + B^R + D
-                        candidates.append(A + C[::-1] + B[::-1] + D)
-
-                        improved_here = False
-
-                        for new_tour in candidates:
-                            # garante que está fechado (por segurança)
-                            if new_tour[0] != new_tour[-1]:
-                                new_tour[-1] = new_tour[0]
-
-                            new_cost = Solution.compute_cost_static(
-                                new_tour, dist_matrix, is_closed=True
-                            )
-
-                            if new_cost < best_cost - 1e-12:
-                                best_cost = new_cost
-                                best_tour = new_tour
-                                improved = True
-                                improved_here = True
-                                break  # sai do loop de candidatos
-
-                        if improved_here:
-                            break  # sai do loop de k
-                    if improved:
-                        break  # sai do loop de j
-                if improved:
-                    break  # sai do loop de i
-
-        return Solution(best_tour, dist_matrix, is_closed=True)
-
-    def lin_kernighan(self, solution: Solution, max_depth: int = 4) -> Solution:
+    def lin_kernighan(self, solution: Solution, max_depth: int = 2) -> Solution:
         """
         Heurística de Lin–Kernighan (versão simplificada) usando cadeias
         de movimentos 2-opt de profundidade variável.
@@ -178,9 +88,7 @@ class LocalSearch:
             # aplica a melhor cadeia encontrada, se houver
             if best_global_gain > 1e-12:
                 current_tour = best_global_tour
-                current_cost = Solution.compute_cost_static(
-                    current_tour, dist_matrix, is_closed=True
-                )
+                current_cost = Solution.compute_cost_static(current_tour, dist_matrix, is_closed=True)
                 improved = True
 
         return Solution(current_tour, dist_matrix, is_closed=True)
