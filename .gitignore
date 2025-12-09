@@ -1,5 +1,17 @@
+# Python
 *.py[cod]
-.vscode/launch.json
+__pycache__/
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
 secrets.secrets
 data/tsplib
 data/train
