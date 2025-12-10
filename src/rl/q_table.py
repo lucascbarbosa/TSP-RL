@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -79,13 +79,7 @@ class QTable:
         factor: float = 0.995,
         min_epsilon: float = 0.01,
     ) -> None:
-        """
-        Decay exploration rate.
-
-        Args:
-            factor: Multiplicative decay factor.
-            min_epsilon: Minimum epsilon value.
-        """
+        """Decay exploration rate by factor, clamped to min_epsilon."""
         self.epsilon = max(min_epsilon, self.epsilon * factor)
 
     def to_txt(self, filename: Union[str, Path]) -> None:
@@ -135,7 +129,7 @@ class QTable:
         return cls(n_states=n_states, n_actions=n_actions, table=table)
 
     def copy(self) -> QTable:
-        """Create a deep copy of this Q-Table."""
+        """Deep copy."""
         return QTable(
             n_states=self.n_states,
             n_actions=self.n_actions,
@@ -149,7 +143,7 @@ class QTable:
         n_simulations: int,
         initial_state: int,
         max_steps: int = 1000,
-    ) -> Dict[str, List[float]]:
+    ) -> dict[str, list[float]]:
         """
         Run rollout simulations using the learned policy.
 
@@ -162,7 +156,7 @@ class QTable:
         Returns:
             Dictionary with 'rewards' and 'length' lists.
         """
-        history: Dict[str, List[float]] = {"rewards": [], "length": []}
+        history: dict[str, list[float]] = {"rewards": [], "length": []}
         mdp = build_mdp_from_file(transition_filename)
         P = mdp.transition_matrix
         R = mdp.reward_matrix

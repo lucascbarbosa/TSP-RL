@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,7 +23,7 @@ class Solution:
 
     def __init__(
         self,
-        tour: List[int],
+        tour: list[int],
         dist_matrix: NDArray[np.float64],
         is_closed: bool = True,
         cost: Optional[float] = None,
@@ -35,14 +35,13 @@ class Solution:
 
     @property
     def cost(self) -> float:
-        """Return tour cost, computing lazily if needed."""
+        """Tour cost (lazy-computed on first access)."""
         if self._cost is None:
             self._cost = self._compute_cost()
         return self._cost
 
     @cost.setter
     def cost(self, value: float) -> None:
-        """Allow setting cost directly (for delta updates)."""
         self._cost = value
 
     def _compute_cost(self) -> float:
@@ -50,7 +49,7 @@ class Solution:
 
     @staticmethod
     def compute_cost_static(
-        tour: List[int],
+        tour: list[int],
         dist_matrix: NDArray[np.float64],
         is_closed: bool = True,
     ) -> float:
@@ -82,7 +81,7 @@ class Solution:
         return cost
 
     def copy(self) -> Solution:
-        """Create a deep copy of this solution, preserving computed cost."""
+        """Deep copy preserving computed cost."""
         return Solution(self.tour, self.dist_matrix, self.is_closed, self._cost)
 
     def __repr__(self) -> str:

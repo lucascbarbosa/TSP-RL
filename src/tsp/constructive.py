@@ -3,21 +3,13 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Dict, List, Tuple
+from typing import Callable
 
 from src.tsp.instance import TSPInstance
 
 
-def random_tour(problem: TSPInstance) -> Tuple[List[int], float]:
-    """
-    Generate a random tour.
-
-    Args:
-        problem: TSP instance.
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+def random_tour(problem: TSPInstance) -> tuple[list[int], float]:
+    """Generate a random tour. Returns (closed_tour, cost)."""
     nodes = list(problem.get_nodes())
     n = len(nodes)
 
@@ -39,17 +31,8 @@ def random_tour(problem: TSPInstance) -> Tuple[List[int], float]:
 def nearest_neighbor(
     problem: TSPInstance,
     start_node: int | None = None,
-) -> Tuple[List[int], float]:
-    """
-    Generate tour using nearest neighbor heuristic.
-
-    Args:
-        problem: TSP instance.
-        start_node: Starting node (random if None).
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+) -> tuple[list[int], float]:
+    """Nearest neighbor heuristic. Returns (closed_tour, cost)."""
     n = problem.dimension
     if start_node is None:
         start_node = random.choice(list(problem.get_nodes()))
@@ -78,20 +61,8 @@ def nearest_neighbor(
 def cheapest_insertion(
     problem: TSPInstance,
     start_node: int | None = None,
-) -> Tuple[List[int], float]:
-    """
-    Generate tour using cheapest insertion heuristic.
-
-    Starts with a 2-node cycle and iteratively inserts the node
-    that causes minimum cost increase.
-
-    Args:
-        problem: TSP instance.
-        start_node: Starting node (random if None).
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+) -> tuple[list[int], float]:
+    """Cheapest insertion heuristic. Returns (closed_tour, cost)."""
     nodes = list(problem.get_nodes())
     n = len(nodes)
 
@@ -141,7 +112,7 @@ def cheapest_insertion(
 
 
 # Registry: constructive heuristic name -> function
-CONSTRUCTIVES: Dict[str, Callable[[TSPInstance], Tuple[List[int], float]]] = {
+CONSTRUCTIVES: dict[str, Callable[[TSPInstance], tuple[list[int], float]]] = {
     "random": random_tour,
     "nearest": nearest_neighbor,
     "cheapest": cheapest_insertion,

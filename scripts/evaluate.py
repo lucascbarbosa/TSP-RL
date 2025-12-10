@@ -21,24 +21,23 @@ import json
 import multiprocessing
 import os
 import re
-import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 
 from src.tsp.instance import TSPInstance
 from src.ils.q_ils import QILS
 
 # Optional plotting utilities
 try:
-    from utils.plot import generate_gap_violin_plots
+    from utils.plot import generate_gap_violin_plots, generate_time_analysis_plots
 
     HAS_PLOTTING = True
 except ImportError:
     HAS_PLOTTING = False
 
 
-def get_available_sizes(instance_type: str) -> Set[int]:
+def get_available_sizes(instance_type: str) -> set[int]:
     """
     Detect available Q-table sizes for a given instance type.
 
@@ -52,7 +51,7 @@ def get_available_sizes(instance_type: str) -> Set[int]:
     if not q_tables_dir.exists():
         return set()
 
-    sizes: Set[int] = set()
+    sizes: set[int] = set()
     for f in q_tables_dir.glob("instance_size_*.txt"):
         match = re.search(r"instance_size_(\d+)\.txt", f.name)
         if match:
@@ -60,7 +59,7 @@ def get_available_sizes(instance_type: str) -> Set[int]:
     return sizes
 
 
-def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[int, int]:
+def get_instance_dimensions(dataset_path: str, instance_ids: list[int]) -> dict[int, int]:
     """
     Get dimensions for specific instances from dataset.
 
@@ -74,7 +73,7 @@ def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[
     with open(dataset_path, "r") as f:
         data = json.load(f)
 
-    dimensions: Dict[int, int] = {}
+    dimensions: dict[int, int] = {}
     for idx in instance_ids:
         if 0 <= idx < len(data):
             dimensions[idx] = len(data[idx]["coords"])
@@ -92,9 +91,9 @@ def get_default_workers() -> int:
     return max(1, os.cpu_count() - 2)
 
 
-def get_processed_instances(filename: str) -> Set[str]:
+def get_processed_instances(filename: str) -> set[str]:
     """Load already processed instance IDs from results file."""
-    processed: Set[str] = set()
+    processed: set[str] = set()
     if os.path.exists(filename):
         with open(filename, mode="r", newline="") as file:
             reader = csv.reader(file)
@@ -113,65 +112,125 @@ def initialize_csv(filename: str) -> None:
         with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
-                ["Full ID", "Name", "ID", "Type", "Dimension", "Optimal Cost", "Best Cost", "Gap", "Time", "Best Tour"]
+                [
+                    # Instance info
+                    "Full ID",
+                    "Name",
+                    "ID",
+                    "Type",
+                    "Dimension",
+                    # Solution quality
+                    "Optimal Cost",
+                    "Best Cost",
+                    "Gap",
+                    # Timing (ms)
+                    "Time (ms)",
+                    "Init Time (ms)",
+                    # Iteration stats
+                    "Total Iterations",
+                    "Best Iteration",
+                    "Improvements",
+                    "Early Stopped",
+                    # Initial solution
+                    "Initial Cost",
+                    "Initial Gap",
+                    # Best tour
+                    "Best Tour",
+                ]
             )
 
 
-def process_instance(args: Tuple[int, str, int, float]) -> Optional[List]:
+def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
     """
     Process a single TSP instance.
 
     Args:
-        args: Tuple of (instance_id, instance_type, max_iter, epsilon).
+        args: Tuple of (instance_id, instance_type, max_iter, epsilon, allow_early_stop).
 
     Returns:
         Row data for CSV or None on failure.
     """
-    instance_id, instance_type, max_iter, epsilon = args
+    instance_id, instance_type, max_iter, epsilon, allow_early_stop = args
 
     try:
         # Load instance
         problem = TSPInstance(f"data/{instance_type}.json", instance_id=instance_id)
 
-        # Calculate optimal cost
+        # Calculate optimal cost (primal value from MIP solver)
         opt_tour = problem.opt_tour
         if opt_tour is None:
             print(f"SKIP: {instance_type}{instance_id} - No optimal tour")
             return None
 
-        opt_cost = sum(problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
+        primal_cost = sum(
+            problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
+        )
+
+        # Calculate early_stop_target based on MIP gap
+        # - gap == 0.0: tour is provably optimal, use primal_cost
+        # - gap > 0: use lower_bound = primal / (1 + gap/100)
+        # - gap is None: no guarantee, disable early stop
+        mip_gap = problem.mip_gap
+        if not allow_early_stop:
+            early_stop_target = None  # Globally disabled
+        elif mip_gap is None:
+            early_stop_target = None  # No gap info, can't guarantee optimality
+        elif mip_gap == 0.0:
+            early_stop_target = primal_cost  # Tour is optimal
+        else:
+            # mip_gap > 0: lower_bound = primal / (1 + gap)
+            early_stop_target = primal_cost / (1 + mip_gap)
 
         # Setup Q-ILS solver
         solver = QILS(problem)
         q_table_path = f"data/q_tables/{instance_type}/instance_size_{problem.dimension:02d}.txt"
         solver.load_q_table(q_table_path)
 
-        # Run Q-ILS
-        time_start = time.time()
+        # Run Q-ILS (stats are collected internally)
+        # opt_cost is always primal_cost (for gap calculation)
+        # early_stop_target controls when to stop early
         best_solution = solver.run(
             max_iter=max_iter,
-            opt_cost=opt_cost,
+            opt_cost=primal_cost,
             epsilon=epsilon,
             verbose=False,
+            early_stop=allow_early_stop,
+            early_stop_target=early_stop_target,
         )
-        exec_time = time.time() - time_start
 
-        # Calculate gap
-        gap_value = ((best_solution.cost - opt_cost) / opt_cost) * 100
+        # Get stats from solver
+        stats = solver.last_stats
         full_id = f"{instance_type}{instance_id}"
 
-        print(f"DONE: {full_id} | Gap: {gap_value:.2f}% | Time: {exec_time:.2f}s")
+        early_str = " [EARLY]" if stats.early_stopped else ""
+        print(
+            f"DONE: {full_id} | Gap: {stats.final_gap:.2f}% | "
+            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}{early_str}"
+        )
 
         return [
+            # Instance info
             full_id,
             problem.name,
             instance_id,
             instance_type,
             problem.dimension,
-            opt_cost,
+            # Solution quality
+            primal_cost,
             best_solution.cost,
-            f"{gap_value:.4f}%",
-            exec_time,
+            f"{stats.final_gap:.4f}%",
+            # Timing (ms)
+            f"{stats.total_time_ms:.2f}",
+            f"{stats.init_time_ms:.2f}",
+            # Iteration stats
+            stats.total_iterations,
+            stats.best_iteration,
+            stats.improvements,
+            stats.early_stopped,
+            # Initial solution
+            f"{stats.initial_cost:.4f}",
+            f"{stats.initial_gap:.4f}%",
+            # Best tour
             str(best_solution.tour),
         ]
 
@@ -230,6 +289,11 @@ def main() -> None:
         action="store_true",
         help="Disable plot generation after evaluation",
     )
+    parser.add_argument(
+        "--no-early-stop",
+        action="store_true",
+        help="Disable early stop when reaching optimal cost",
+    )
     args = parser.parse_args()
 
     # Load processed instances and initialize CSV
@@ -240,8 +304,9 @@ def main() -> None:
     with open(args.splits, "r") as f:
         splits = json.load(f)
 
-    # Build job list (instance_id, instance_type, max_iter, epsilon)
-    jobs: List[Tuple[int, str, int, float]] = []
+    # Build job list (instance_id, instance_type, max_iter, epsilon, early_stop)
+    early_stop = not args.no_early_stop
+    jobs: list[tuple[int, str, int, float, bool]] = []
 
     for instance_type in args.types:
         key = f"data/{instance_type}.json"
@@ -278,7 +343,7 @@ def main() -> None:
                 filtered_count += 1
                 continue
 
-            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon))
+            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop))
 
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
@@ -301,10 +366,16 @@ def main() -> None:
 
     print(f"Evaluation complete. {len(valid_results)}/{len(jobs)} instances processed.")
 
-    # Generate violin plots if enabled
+    # Generate plots if enabled
     if HAS_PLOTTING and not args.no_plots:
         print("\nGenerating gap distribution plots...")
         generate_gap_violin_plots(
+            csv_path=args.output,
+            output_dir="data/plots",
+            types=args.types,
+        )
+        print("\nGenerating time analysis plots...")
+        generate_time_analysis_plots(
             csv_path=args.output,
             output_dir="data/plots",
             types=args.types,

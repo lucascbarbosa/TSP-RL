@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -13,7 +13,7 @@ from numpy.typing import NDArray
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-TransitionData = Tuple[
+TransitionData = tuple[
     Union[NDArray[np.int32], torch.Tensor],  # current_states
     Union[NDArray[np.int32], torch.Tensor],  # actions
     Union[NDArray[np.float32], torch.Tensor],  # rewards
@@ -76,7 +76,7 @@ def load_transition_folder(
     Returns:
         Aggregated transition data tuple.
     """
-    matrix_list: List[NDArray] = []
+    matrix_list: list[NDArray] = []
 
     for filename in sorted(os.listdir(transition_folder)):
         if re.search(filter_pattern, filename) and filename.endswith(".txt"):
@@ -101,7 +101,7 @@ def load_transition_folder(
 
 
 def load_transition_from_paths(
-    paths: List[Union[str, Path]],
+    paths: list[Union[str, Path]],
     return_torch: bool = False,
 ) -> TransitionData:
     """
@@ -114,7 +114,7 @@ def load_transition_from_paths(
     Returns:
         Aggregated transition data tuple.
     """
-    matrix_list: List[NDArray] = []
+    matrix_list: list[NDArray] = []
 
     for file_path in sorted(paths):
         try:
@@ -137,7 +137,7 @@ def load_transition_from_paths(
 
 
 def _process_transition_matrices(
-    matrix_list: List[NDArray],
+    matrix_list: list[NDArray],
     return_torch: bool,
 ) -> TransitionData:
     """

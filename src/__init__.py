@@ -5,7 +5,7 @@ from src.tsp.instance import TSPInstance, TSPDataset
 from src.tsp.local_search import LOCAL_SEARCHES, two_opt, lin_kernighan
 from src.tsp.perturbation import PERTURBATIONS, two_swap, segment_reverse
 from src.tsp.constructive import CONSTRUCTIVES, random_tour, nearest_neighbor, cheapest_insertion
-from src.ils.q_ils import QILS, State, Action, N_STATES, N_ACTIONS
+from src.ils.q_ils import QILS, State, Action, N_STATES, N_ACTIONS, RunStats
 from src.rl.q_table import QTable
 from src.rl.mdp import MDP
 
@@ -33,6 +33,7 @@ __all__ = [
     "Action",
     "N_STATES",
     "N_ACTIONS",
+    "RunStats",
     # RL
     "QTable",
     "MDP",

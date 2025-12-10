@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -87,7 +87,7 @@ def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 # Registry: edge_weight_type -> distance function
-DISTANCE_METRICS: Dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]] = {
+DISTANCE_METRICS: dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]] = {
     "EUC_2D": _euc_2d,
     "ATT": _att,
     "GEO": _geo,
@@ -95,7 +95,7 @@ DISTANCE_METRICS: Dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]
 
 
 def _infer_edge_weight_type(path: Union[str, Path]) -> str:
-    """Infer edge weight type from file path (e.g., 'data/GEO.json' -> 'GEO')."""
+    """Infer edge weight type from filename (e.g., 'GEO.json' -> 'GEO')."""
     stem = Path(path).stem.upper()
     if stem in DISTANCE_METRICS:
         return stem
@@ -123,7 +123,7 @@ class TSPInstance:
         path: Union[str, Path],
         instance_id: int = 0,
         num_cities: Optional[int] = None,
-        preloaded_data: Optional[List[Dict[str, Any]]] = None,
+        preloaded_data: Optional[list[dict[str, Any]]] = None,
         edge_weight_type: Optional[str] = None,
     ) -> None:
         """
@@ -164,25 +164,22 @@ class TSPInstance:
         # Load optimal tour if available
         if "tour" in entry and entry["tour"] is not None:
             full_tour = [c + 1 for c in entry["tour"]]
-            self.opt_tour: Optional[List[int]] = [c for c in full_tour if c <= self.n]
+            self.opt_tour: Optional[list[int]] = [c for c in full_tour if c <= self.n]
         else:
             self.opt_tour = None
 
+        # Load MIP gap (duality gap from solver)
+        # gap=0 means tour is provably optimal
+        # gap>0 means solver didn't close gap (lower_bound = primal / (1 + gap/100))
+        # gap=None means no gap info available
+        self.mip_gap: Optional[float] = entry.get("gap")
+
     def get_nodes(self) -> range:
-        """Return node indices {1, 2, ..., n}."""
+        """Node indices {1, ..., n}."""
         return range(1, self.n + 1)
 
     def get_weight(self, i: int, j: int) -> float:
-        """
-        Get distance between nodes i and j (1-based indexing).
-
-        Args:
-            i: First node (1-based).
-            j: Second node (1-based).
-
-        Returns:
-            Distance between nodes.
-        """
+        """Distance between nodes i and j (1-based)."""
         return float(self.dist_matrix[i - 1, j - 1])
 
 
@@ -196,7 +193,7 @@ class TSPDataset:
     def __init__(
         self,
         json_file_path: Union[str, Path],
-        active_indices: List[int],
+        active_indices: list[int],
         edge_weight_type: Optional[str] = None,
     ) -> None:
         """
