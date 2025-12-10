@@ -30,7 +30,7 @@ from src.ils.q_ils import QILS
 
 # Optional plotting utilities
 try:
-    from utils.plot import generate_gap_violin_plots
+    from utils.plot import generate_gap_violin_plots, generate_time_analysis_plots
 
     HAS_PLOTTING = True
 except ImportError:
@@ -111,33 +111,46 @@ def initialize_csv(filename: str) -> None:
     if not os.path.isfile(filename):
         with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow([
-                # Instance info
-                "Full ID", "Name", "ID", "Type", "Dimension",
-                # Solution quality
-                "Optimal Cost", "Best Cost", "Gap",
-                # Timing (ms)
-                "Time (ms)", "Init Time (ms)",
-                # Iteration stats
-                "Total Iterations", "Best Iteration", "Improvements",
-                # Initial solution
-                "Initial Cost", "Initial Gap",
-                # Best tour
-                "Best Tour",
-            ])
+            writer.writerow(
+                [
+                    # Instance info
+                    "Full ID",
+                    "Name",
+                    "ID",
+                    "Type",
+                    "Dimension",
+                    # Solution quality
+                    "Optimal Cost",
+                    "Best Cost",
+                    "Gap",
+                    # Timing (ms)
+                    "Time (ms)",
+                    "Init Time (ms)",
+                    # Iteration stats
+                    "Total Iterations",
+                    "Best Iteration",
+                    "Improvements",
+                    "Early Stopped",
+                    # Initial solution
+                    "Initial Cost",
+                    "Initial Gap",
+                    # Best tour
+                    "Best Tour",
+                ]
+            )
 
 
-def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
+def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
     """
     Process a single TSP instance.
 
     Args:
-        args: Tuple of (instance_id, instance_type, max_iter, epsilon).
+        args: Tuple of (instance_id, instance_type, max_iter, epsilon, early_stop).
 
     Returns:
         Row data for CSV or None on failure.
     """
-    instance_id, instance_type, max_iter, epsilon = args
+    instance_id, instance_type, max_iter, epsilon, early_stop = args
 
     try:
         # Load instance
@@ -162,15 +175,17 @@ def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
             opt_cost=opt_cost,
             epsilon=epsilon,
             verbose=False,
+            early_stop=early_stop,
         )
 
         # Get stats from solver
         stats = solver.last_stats
         full_id = f"{instance_type}{instance_id}"
 
+        early_str = " [EARLY]" if stats.early_stopped else ""
         print(
             f"DONE: {full_id} | Gap: {stats.final_gap:.2f}% | "
-            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}"
+            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}{early_str}"
         )
 
         return [
@@ -191,6 +206,7 @@ def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
             stats.total_iterations,
             stats.best_iteration,
             stats.improvements,
+            stats.early_stopped,
             # Initial solution
             f"{stats.initial_cost:.4f}",
             f"{stats.initial_gap:.4f}%",
@@ -253,6 +269,11 @@ def main() -> None:
         action="store_true",
         help="Disable plot generation after evaluation",
     )
+    parser.add_argument(
+        "--no-early-stop",
+        action="store_true",
+        help="Disable early stop when reaching optimal cost",
+    )
     args = parser.parse_args()
 
     # Load processed instances and initialize CSV
@@ -263,8 +284,9 @@ def main() -> None:
     with open(args.splits, "r") as f:
         splits = json.load(f)
 
-    # Build job list (instance_id, instance_type, max_iter, epsilon)
-    jobs: list[tuple[int, str, int, float]] = []
+    # Build job list (instance_id, instance_type, max_iter, epsilon, early_stop)
+    early_stop = not args.no_early_stop
+    jobs: list[tuple[int, str, int, float, bool]] = []
 
     for instance_type in args.types:
         key = f"data/{instance_type}.json"
@@ -301,7 +323,7 @@ def main() -> None:
                 filtered_count += 1
                 continue
 
-            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon))
+            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop))
 
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
@@ -324,10 +346,16 @@ def main() -> None:
 
     print(f"Evaluation complete. {len(valid_results)}/{len(jobs)} instances processed.")
 
-    # Generate violin plots if enabled
+    # Generate plots if enabled
     if HAS_PLOTTING and not args.no_plots:
         print("\nGenerating gap distribution plots...")
         generate_gap_violin_plots(
+            csv_path=args.output,
+            output_dir="data/plots",
+            types=args.types,
+        )
+        print("\nGenerating time analysis plots...")
+        generate_time_analysis_plots(
             csv_path=args.output,
             output_dir="data/plots",
             types=args.types,

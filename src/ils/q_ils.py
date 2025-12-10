@@ -32,6 +32,7 @@ class RunStats:
     total_iterations: int = 0
     best_iteration: int = 0  # Iteration where best solution was found
     improvements: int = 0  # Number of improvements found
+    early_stopped: bool = False  # True if stopped early by reaching target
 
     # Solution quality
     initial_cost: float = 0.0
@@ -51,6 +52,7 @@ class RunStats:
             "total_iterations": self.total_iterations,
             "best_iteration": self.best_iteration,
             "improvements": self.improvements,
+            "early_stopped": self.early_stopped,
             "initial_cost": self.initial_cost,
             "initial_gap": self.initial_gap,
             "final_cost": self.final_cost,
@@ -306,6 +308,7 @@ class QILS:
         opt_cost: float = 0.0,
         epsilon: float = 0.0,
         verbose: bool = True,
+        early_stop: bool = True,
     ) -> Solution:
         """
         Run Q-ILS using the learned Q-table.
@@ -315,6 +318,7 @@ class QILS:
             opt_cost: Optimal cost for state calculation.
             epsilon: Exploration rate for action selection.
             verbose: Print progress information.
+            early_stop: Stop early when reaching opt_cost (gap <= 0).
 
         Returns:
             Best solution found. Access self.last_stats for detailed metrics.
@@ -374,6 +378,13 @@ class QILS:
                 best_iteration = iteration
                 stats.improvements += 1
                 iter_without_improvement = 0
+
+                # Early stop: check if we reached the target (gap <= 0)
+                if early_stop and best_solution.cost <= opt_cost:
+                    stats.early_stopped = True
+                    if verbose:
+                        print(f"[Q-ILS] Early stop: reached target cost {opt_cost:.4f}")
+                    break
             else:
                 iter_without_improvement += 1
 

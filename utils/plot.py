@@ -113,6 +113,54 @@ def load_gaps_from_csv(
     return {t: dict(sizes) for t, sizes in gaps_by_type_size.items()}
 
 
+def load_results_from_csv(
+    csv_path: Union[str, Path],
+) -> Dict[str, Dict[int, Dict[str, List[float]]]]:
+    """
+    Load full results data from CSV file (gaps, times, iterations).
+
+    Args:
+        csv_path: Path to results CSV file.
+
+    Returns:
+        Nested dict: {instance_type: {size: {"gaps": [...], "times": [...], ...}}}
+    """
+    data: Dict[str, Dict[int, Dict[str, List]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
+    )
+
+    with open(csv_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            instance_type = row["Type"]
+            dimension = int(row["Dimension"])
+
+            # Parse gap
+            gap_str = row["Gap"].replace("%", "")
+            gap_value = float(gap_str)
+
+            # Parse time (ms) - handle both old "Time" (seconds) and new "Time (ms)" formats
+            if "Time (ms)" in row:
+                time_ms = float(row["Time (ms)"])
+            elif "Time" in row:
+                time_ms = float(row["Time"]) * 1000  # Convert s to ms
+            else:
+                time_ms = 0.0
+
+            # Parse iterations if available
+            iterations = int(row.get("Total Iterations", 0))
+
+            data[instance_type][dimension]["gaps"].append(gap_value)
+            data[instance_type][dimension]["times"].append(time_ms)
+            data[instance_type][dimension]["iterations"].append(iterations)
+
+    # Convert defaultdicts to regular dicts
+    return {
+        t: {s: dict(metrics) for s, metrics in sizes.items()}
+        for t, sizes in data.items()
+    }
+
+
 def generate_gap_violin_plots(
     csv_path: Union[str, Path],
     output_dir: Union[str, Path],
@@ -607,3 +655,337 @@ def plot_tour(
     else:
         plt.show()
         plt.close()
+
+
+# =============================================================================
+# Time Analysis Plots
+# =============================================================================
+
+
+def plot_gap_and_time_violins(
+    results_by_size: Dict[int, Dict[str, List[float]]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot gap and time distributions side-by-side as violin plots.
+
+    Shows gap (left, blue) and time (right, orange) for each instance size.
+
+    Args:
+        results_by_size: {size: {"gaps": [...], "times": [...]}}
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    sizes = sorted(results_by_size.keys())
+    gaps_data = [results_by_size[s]["gaps"] for s in sizes]
+    times_data = [results_by_size[s]["times"] for s in sizes]
+
+    # Adjust figure width based on number of sizes
+    fig_width = max(8, len(sizes) * 1.2 + 2)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width, 8), sharex=True)
+
+    # Gap violin (top)
+    parts_gap = ax1.violinplot(
+        gaps_data,
+        positions=range(len(sizes)),
+        showmeans=True,
+        showmedians=True,
+        widths=0.7,
+    )
+    for pc in parts_gap["bodies"]:
+        pc.set_facecolor(COLORS["primary"])
+        pc.set_alpha(0.4)
+    parts_gap["cmeans"].set_color(COLORS["secondary"])
+    parts_gap["cmedians"].set_color(COLORS["tertiary"])
+    for partname in ["cbars", "cmins", "cmaxes"]:
+        parts_gap[partname].set_color("#666666")
+
+    ax1.set_ylabel("Gap (%)")
+    ax1.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    ax1.set_title("Gap Distribution" if not title else f"{title} - Gap")
+
+    # Time violin (bottom)
+    parts_time = ax2.violinplot(
+        times_data,
+        positions=range(len(sizes)),
+        showmeans=True,
+        showmedians=True,
+        widths=0.7,
+    )
+    for pc in parts_time["bodies"]:
+        pc.set_facecolor(COLORS["tertiary"])
+        pc.set_alpha(0.4)
+    parts_time["cmeans"].set_color(COLORS["secondary"])
+    parts_time["cmedians"].set_color(COLORS["primary"])
+    for partname in ["cbars", "cmins", "cmaxes"]:
+        parts_time[partname].set_color("#666666")
+
+    ax2.set_ylabel("Time (ms)")
+    ax2.set_xlabel("Instance Size (n)")
+    ax2.set_xticks(range(len(sizes)))
+    ax2.set_xticklabels([str(s) for s in sizes])
+    ax2.set_title("Time Distribution" if not title else f"{title} - Time")
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_time_vs_gap_scatter(
+    gaps: List[float],
+    times: List[float],
+    title: Optional[str] = None,
+    highlight_suboptimal: bool = True,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Scatter plot of execution time vs gap.
+
+    Useful to analyze if longer runs tend to find worse solutions.
+
+    Args:
+        gaps: List of gap percentages.
+        times: List of execution times (ms).
+        title: Plot title.
+        highlight_suboptimal: Highlight instances with gap > 0.
+        save_path: Path to save figure (displays if None).
+    """
+    gaps_arr = np.array(gaps)
+    times_arr = np.array(times)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    if highlight_suboptimal:
+        # Split into optimal (gap <= 0) and suboptimal (gap > 0)
+        optimal_mask = gaps_arr <= 0
+        suboptimal_mask = ~optimal_mask
+
+        ax.scatter(
+            times_arr[optimal_mask],
+            gaps_arr[optimal_mask],
+            alpha=0.5,
+            s=30,
+            c=COLORS["primary"],
+            label=f"Optimal (n={optimal_mask.sum()})",
+            edgecolor="white",
+            linewidth=0.3,
+        )
+        ax.scatter(
+            times_arr[suboptimal_mask],
+            gaps_arr[suboptimal_mask],
+            alpha=0.7,
+            s=40,
+            c=COLORS["quaternary"],
+            label=f"Suboptimal (n={suboptimal_mask.sum()})",
+            edgecolor="white",
+            linewidth=0.3,
+        )
+
+        # Stats for suboptimal only
+        if suboptimal_mask.sum() > 0:
+            mean_time_sub = times_arr[suboptimal_mask].mean()
+            mean_gap_sub = gaps_arr[suboptimal_mask].mean()
+            ax.axvline(
+                x=mean_time_sub,
+                color=COLORS["quaternary"],
+                linestyle=":",
+                alpha=0.7,
+                label=f"Subopt. mean time: {mean_time_sub:.0f}ms",
+            )
+    else:
+        ax.scatter(
+            times_arr,
+            gaps_arr,
+            alpha=0.5,
+            s=30,
+            c=COLORS["primary"],
+            edgecolor="white",
+            linewidth=0.3,
+        )
+
+    ax.set_xlabel("Execution Time (ms)")
+    ax.set_ylabel("Gap (%)")
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    ax.legend(loc="upper right", framealpha=0.9)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_suboptimal_time_analysis(
+    results_by_size: Dict[int, Dict[str, List[float]]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Analyze execution time specifically for suboptimal instances (gap > 0).
+
+    Shows time distribution only for instances that didn't reach the optimum.
+
+    Args:
+        results_by_size: {size: {"gaps": [...], "times": [...]}}
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    sizes = sorted(results_by_size.keys())
+
+    # Filter to suboptimal instances only
+    subopt_times: Dict[int, List[float]] = {}
+    subopt_counts: Dict[int, Tuple[int, int]] = {}  # (suboptimal, total)
+
+    for size in sizes:
+        gaps = np.array(results_by_size[size]["gaps"])
+        times = np.array(results_by_size[size]["times"])
+        mask = gaps > 0.001  # Small threshold for floating point
+        subopt_times[size] = times[mask].tolist()
+        subopt_counts[size] = (mask.sum(), len(gaps))
+
+    # Only plot sizes with suboptimal instances
+    sizes_with_subopt = [s for s in sizes if len(subopt_times[s]) > 0]
+
+    if not sizes_with_subopt:
+        print("No suboptimal instances found - skipping plot")
+        return
+
+    fig_width = max(6, len(sizes_with_subopt) * 0.8 + 2)
+    fig, ax = plt.subplots(figsize=(fig_width, 5))
+
+    times_data = [subopt_times[s] for s in sizes_with_subopt]
+
+    parts = ax.violinplot(
+        times_data,
+        positions=range(len(sizes_with_subopt)),
+        showmeans=True,
+        showmedians=True,
+        widths=0.7,
+    )
+
+    for pc in parts["bodies"]:
+        pc.set_facecolor(COLORS["quaternary"])
+        pc.set_alpha(0.4)
+    parts["cmeans"].set_color(COLORS["secondary"])
+    parts["cmedians"].set_color(COLORS["tertiary"])
+    for partname in ["cbars", "cmins", "cmaxes"]:
+        parts[partname].set_color("#666666")
+
+    # Add count annotations
+    for i, size in enumerate(sizes_with_subopt):
+        n_sub, n_total = subopt_counts[size]
+        pct = 100 * n_sub / n_total if n_total > 0 else 0
+        ax.annotate(
+            f"{n_sub}/{n_total}\n({pct:.0f}%)",
+            xy=(i, ax.get_ylim()[1]),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="#666666",
+        )
+
+    ax.set_xticks(range(len(sizes_with_subopt)))
+    ax.set_xticklabels([str(s) for s in sizes_with_subopt])
+    ax.set_xlabel("Instance Size (n)")
+    ax.set_ylabel("Execution Time (ms)")
+
+    if title:
+        ax.set_title(title)
+    else:
+        ax.set_title("Execution Time for Suboptimal Instances (gap > 0)")
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def generate_time_analysis_plots(
+    csv_path: Union[str, Path],
+    output_dir: Union[str, Path],
+    types: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Generate time analysis plots from results CSV.
+
+    Creates per-type plots: gap+time violins, time vs gap scatter, suboptimal analysis.
+
+    Args:
+        csv_path: Path to results CSV file.
+        output_dir: Directory to save plots.
+        types: Instance types to plot (default: all found in CSV).
+
+    Returns:
+        List of generated plot file paths.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    results_data = load_results_from_csv(csv_path)
+
+    if types is not None:
+        results_data = {t: results_data[t] for t in types if t in results_data}
+
+    generated_files: List[str] = []
+
+    for instance_type, results_by_size in results_data.items():
+        if not results_by_size:
+            continue
+
+        type_dir = output_dir / instance_type
+        type_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Gap + Time violins
+        gap_time_path = type_dir / f"{instance_type}_gap_time_violins.png"
+        plot_gap_and_time_violins(
+            results_by_size,
+            title=f"Q-ILS Performance ({instance_type})",
+            save_path=gap_time_path,
+        )
+        generated_files.append(str(gap_time_path))
+        print(f"  Generated: {gap_time_path}")
+
+        # 2. Time vs Gap scatter (aggregated across all sizes)
+        all_gaps = []
+        all_times = []
+        for size_data in results_by_size.values():
+            all_gaps.extend(size_data["gaps"])
+            all_times.extend(size_data["times"])
+
+        scatter_path = type_dir / f"{instance_type}_time_vs_gap.png"
+        plot_time_vs_gap_scatter(
+            all_gaps,
+            all_times,
+            title=f"Time vs Gap ({instance_type})",
+            save_path=scatter_path,
+        )
+        generated_files.append(str(scatter_path))
+        print(f"  Generated: {scatter_path}")
+
+        # 3. Suboptimal time analysis
+        subopt_path = type_dir / f"{instance_type}_suboptimal_time.png"
+        plot_suboptimal_time_analysis(
+            results_by_size,
+            title=f"Suboptimal Instance Times ({instance_type})",
+            save_path=subopt_path,
+        )
+        generated_files.append(str(subopt_path))
+        print(f"  Generated: {subopt_path}")
+
+    return generated_files
