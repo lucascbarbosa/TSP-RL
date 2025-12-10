@@ -29,6 +29,14 @@ from typing import Any, Dict, List, Set, Tuple
 from src.tsp.instance import TSPInstance
 from src.ils.q_ils import QILS
 
+# Optional plotting utilities
+try:
+    from utils.plot import generate_gap_violin_plots
+
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
+
 
 def get_available_sizes(instance_type: str) -> Set[int]:
     """
@@ -218,6 +226,11 @@ def main() -> None:
         default="data/splits.json",
         help="Path to splits JSON file (default: data/splits.json)",
     )
+    parser.add_argument(
+        "--no-plots",
+        action="store_true",
+        help="Disable plot generation after evaluation",
+    )
     args = parser.parse_args()
 
     # Load processed instances and initialize CSV
@@ -278,6 +291,15 @@ def main() -> None:
         executor.map(process_instance, jobs)
 
     print("Evaluation complete.")
+
+    # Generate violin plots if enabled
+    if HAS_PLOTTING and not args.no_plots:
+        print("\nGenerating gap distribution plots...")
+        generate_gap_violin_plots(
+            csv_path=args.output,
+            output_dir="data/plots",
+            types=args.types,
+        )
 
 
 if __name__ == "__main__":

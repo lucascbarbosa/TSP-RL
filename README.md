@@ -82,7 +82,7 @@ TSP-RL/
 │   ├── clear.sh                 # Remove arquivos gerados
 │   └── exemplos.sh              # Pipeline de exemplo (subconjunto pequeno)
 ├── utils/
-│   └── plot.py                  # Visualizações
+│   └── plot.py                  # Visualizações (convergência, heatmap, violin plots)
 ├── data/
 │   ├── EUC_2D.json              # Instâncias euclidianas
 │   ├── ATT.json                 # Instâncias ATT
@@ -142,6 +142,8 @@ Executa o ILS guiado pela Q-table em instâncias de teste:
 python scripts/evaluate.py --help
 python scripts/evaluate.py --types EUC_2D ATT GEO --sizes 10 20 30 --workers 16
 ```
+
+Ao final da avaliação, são gerados automaticamente **violin plots** mostrando a distribuição dos gaps por tamanho de instância (um gráfico por tipo). Use `--no-plots` para desabilitar.
 
 ## Componentes
 

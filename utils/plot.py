@@ -5,8 +5,10 @@ Academic-style plots with consistent formatting for publication.
 
 from __future__ import annotations
 
+import csv
+from collections import defaultdict
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -74,6 +76,92 @@ def setup_style() -> None:
 
 # Apply style on import
 setup_style()
+
+
+# =============================================================================
+# Results Loading
+# =============================================================================
+
+
+def load_gaps_from_csv(
+    csv_path: Union[str, Path],
+) -> Dict[str, Dict[int, List[float]]]:
+    """
+    Load gap data from results CSV file.
+
+    Args:
+        csv_path: Path to results CSV file.
+
+    Returns:
+        Nested dict: {instance_type: {size: [gaps]}}
+        Example: {"EUC_2D": {10: [0.0, 1.2, ...], 20: [...]}, ...}
+    """
+    gaps_by_type_size: Dict[str, Dict[int, List[float]]] = defaultdict(lambda: defaultdict(list))
+
+    with open(csv_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            instance_type = row["Type"]
+            dimension = int(row["Dimension"])
+            # Parse gap: remove "%" and convert to float
+            gap_str = row["Gap"].replace("%", "")
+            gap_value = float(gap_str)
+
+            gaps_by_type_size[instance_type][dimension].append(gap_value)
+
+    # Convert defaultdicts to regular dicts
+    return {t: dict(sizes) for t, sizes in gaps_by_type_size.items()}
+
+
+def generate_gap_violin_plots(
+    csv_path: Union[str, Path],
+    output_dir: Union[str, Path],
+    types: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Generate violin plots for all instance types from results CSV.
+
+    Creates one plot per instance type showing gap distribution by size.
+
+    Args:
+        csv_path: Path to results CSV file.
+        output_dir: Directory to save plots.
+        types: Instance types to plot (default: all found in CSV).
+
+    Returns:
+        List of generated plot file paths.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    gaps_data = load_gaps_from_csv(csv_path)
+
+    if types is not None:
+        # Filter to requested types
+        gaps_data = {t: gaps_data[t] for t in types if t in gaps_data}
+
+    generated_files: List[str] = []
+
+    for instance_type, gaps_by_size in gaps_data.items():
+        if not gaps_by_size:
+            continue
+
+        # Create type-specific output directory
+        type_dir = output_dir / instance_type
+        type_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate violin plot
+        plot_path = type_dir / f"{instance_type}_gap_violins.png"
+        plot_gap_violins_by_size(
+            gaps_by_size,
+            title=f"Q-ILS Gap Distribution ({instance_type})",
+            save_path=plot_path,
+        )
+        generated_files.append(str(plot_path))
+
+        print(f"  Generated: {plot_path}")
+
+    return generated_files
 
 
 # =============================================================================
@@ -297,6 +385,97 @@ def plot_gap_by_size(
     ax.set_xlabel("Instance Size (cities)")
     ax.set_ylabel("Gap (%)")
     ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_gap_violins_by_size(
+    gaps_by_size: dict[int, List[float]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+    show_points: bool = False,
+) -> None:
+    """
+    Plot gap distribution grouped by instance size using violin plots.
+
+    Shows empirical probability density for each instance size.
+
+    Args:
+        gaps_by_size: Dictionary mapping size -> list of gaps.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+        show_points: If True, overlay individual data points.
+    """
+    sizes = sorted(gaps_by_size.keys())
+    data = [gaps_by_size[s] for s in sizes]
+
+    # Adjust figure width based on number of sizes
+    fig_width = max(6, len(sizes) * 0.8 + 2)
+    fig, ax = plt.subplots(figsize=(fig_width, 5))
+
+    # Create violin plot
+    parts = ax.violinplot(
+        data,
+        positions=range(len(sizes)),
+        showmeans=True,
+        showmedians=True,
+        widths=0.7,
+    )
+
+    # Style violin bodies
+    for i, pc in enumerate(parts["bodies"]):
+        pc.set_facecolor(COLORS["primary"])
+        pc.set_edgecolor(COLORS["primary"])
+        pc.set_alpha(0.4)
+
+    # Style mean and median lines
+    parts["cmeans"].set_color(COLORS["secondary"])
+    parts["cmeans"].set_linewidth(1.5)
+    parts["cmedians"].set_color(COLORS["tertiary"])
+    parts["cmedians"].set_linewidth(1.5)
+
+    # Style min/max bars
+    for partname in ["cbars", "cmins", "cmaxes"]:
+        parts[partname].set_color("#666666")
+        parts[partname].set_linewidth(0.8)
+
+    # Overlay individual points if requested
+    if show_points:
+        for i, (size, gaps) in enumerate(zip(sizes, data)):
+            jitter = np.random.normal(0, 0.05, len(gaps))
+            ax.scatter(
+                i + jitter,
+                gaps,
+                alpha=0.3,
+                s=8,
+                color=COLORS["primary"],
+                edgecolor="none",
+            )
+
+    ax.set_xticks(range(len(sizes)))
+    ax.set_xticklabels([str(s) for s in sizes])
+    ax.set_xlabel("Instance Size (n)")
+    ax.set_ylabel("Gap (%)")
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    # Add legend for mean/median
+    from matplotlib.lines import Line2D
+
+    legend_elements = [
+        Line2D([0], [0], color=COLORS["secondary"], linewidth=1.5, label="Mean"),
+        Line2D([0], [0], color=COLORS["tertiary"], linewidth=1.5, label="Median"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
 
     if title:
         ax.set_title(title)
