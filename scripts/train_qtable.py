@@ -29,7 +29,7 @@ from src.rl.q_table import QTable
 
 # Optional: import plotting utilities
 try:
-    from utils.plot import plot_single_q_learning, plot_heatmap
+    from utils.plot import plot_q_convergence, plot_q_heatmap
 
     HAS_PLOTTING = True
 except ImportError:
@@ -165,16 +165,18 @@ def main() -> None:
 
             # Generate plots if available and enabled
             if HAS_PLOTTING and not args.no_plots:
-                plot1_path = f"{plots_dir}/instance_size_{instance_type}_{n_cities:02d}_train.png"
-                plot2_path = f"{plots_dir}/instance_size_{instance_type}_{n_cities:02d}_heatmap.png"
+                convergence_path = f"{plots_dir}/{instance_type}_{n_cities:02d}_convergence.png"
+                heatmap_path = f"{plots_dir}/{instance_type}_{n_cities:02d}_qtable.png"
 
-                plot_single_q_learning(history, plot1_path)
-                plot_heatmap(
+                plot_q_convergence(
+                    history,
+                    title=f"Q-Learning Convergence ({instance_type}, n={n_cities})",
+                    save_path=convergence_path,
+                )
+                plot_q_heatmap(
                     q_table.table.detach().cpu().numpy(),
-                    title=f"Q-table heatmap {instance_type} {n_cities}",
-                    x_labels=[str(i) for i in range(q_table.n_actions)],
-                    y_labels=[str(i) for i in range(q_table.n_states)],
-                    save_path=plot2_path,
+                    title=f"Q-table ({instance_type}, n={n_cities})",
+                    save_path=heatmap_path,
                 )
 
     print("\nDone.")

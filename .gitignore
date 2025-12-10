@@ -16,7 +16,6 @@ secrets.secrets
 data/tsplib
 data/train
 **/old/
-*.png
 
 # LaTeX
 *.aux

@@ -94,10 +94,17 @@ def main() -> None:
         help="Path to dataset JSON file",
     )
     parser.add_argument(
+        "--sizes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Filter by instance sizes (e.g., --sizes 10 20)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
-        help="Limit number of instances (for testing)",
+        help="Limit number of instances per size (for testing)",
     )
     parser.add_argument(
         "--max_iter",
@@ -127,8 +134,23 @@ def main() -> None:
     else:
         train_ids = splits[dataset_key]["train"]
 
-    # Apply limit if specified
-    if args.limit is not None:
+    # Filter by size if specified
+    # Instance structure: IDs 0-1110 = size 10, 1111-2221 = size 20, etc.
+    if args.sizes is not None:
+        size_ranges = {s: set(range((s // 10 - 1) * 1111, (s // 10) * 1111)) for s in args.sizes}
+        all_valid_ids = set().union(*size_ranges.values())
+        filtered_ids = [i for i in train_ids if i in all_valid_ids]
+
+        # Apply limit per size if specified
+        if args.limit is not None:
+            final_ids = []
+            for size in args.sizes:
+                size_ids = [i for i in filtered_ids if i in size_ranges[size]]
+                final_ids.extend(size_ids[: args.limit])
+            train_ids = final_ids
+        else:
+            train_ids = filtered_ids
+    elif args.limit is not None:
         train_ids = train_ids[: args.limit]
 
     # Initialize dataset

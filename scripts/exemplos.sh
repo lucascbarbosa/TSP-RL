@@ -63,6 +63,7 @@ for type in $TYPES; do
         --split_path data/splits.json \
         --dataset_path "data/${type}.json" \
         --output_dir "data/train/${type}" \
+        --sizes $SIZES \
         --limit $LIMIT
     echo ""
 done

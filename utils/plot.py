@@ -1,10 +1,12 @@
-"""Plotting utilities for TSP-RL visualization."""
+"""Plotting utilities for TSP-RL visualization.
+
+Academic-style plots with consistent formatting for publication.
+"""
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,200 +14,360 @@ import seaborn as sns
 from numpy.typing import NDArray
 
 
-def plot_heatmap(
-    matrix: NDArray[np.float64],
-    title: str = "Q-table heatmap",
-    x_labels: List[str] | None = None,
-    y_labels: List[str] | None = None,
-    cmap: str = "viridis",
-    save_path: Optional[Union[str, Path]] = None,
-) -> None:
-    """
-    Plot a heatmap with zeros rendered as black.
+# =============================================================================
+# Style Configuration
+# =============================================================================
 
-    Args:
-        matrix: 2D array to visualize.
-        title: Plot title.
-        x_labels: Labels for x-axis (actions).
-        y_labels: Labels for y-axis (states).
-        cmap: Matplotlib colormap name.
-        save_path: Path to save figure (displays if None).
-    """
-    plt.figure(figsize=(10, 8))
+# Academic color palette (colorblind-friendly)
+COLORS = {
+    "primary": "#2E86AB",
+    "secondary": "#A23B72",
+    "tertiary": "#F18F01",
+    "quaternary": "#C73E1D",
+}
 
-    # Replace zeros with NaN for proper colormap handling
-    matrix_to_plot = matrix.copy()
-    matrix_to_plot[matrix_to_plot == 0.0] = np.nan
+# State and action labels for Q-table visualization
+STATE_LABELS = ["EXCELLENT", "GOOD", "REGULAR", "POOR", "BETTER"]
+ACTION_LABELS = [
+    "swap+2opt",
+    "swap+LK",
+    "rev+2opt",
+    "rev+LK",
+    "rand+2opt",
+    "near+2opt",
+    "cheap+2opt",
+    "near+LK",
+]
 
-    # Create colormap with black for NaN values
-    current_cmap = copy.copy(plt.get_cmap(cmap))
-    current_cmap.set_bad("black")
 
-    sns.heatmap(
-        matrix_to_plot,
-        annot=True,
-        fmt=".1f",
-        cmap=current_cmap,
-        cbar=True,
+def setup_style() -> None:
+    """Configure matplotlib for academic-style plots."""
+    plt.rcParams.update(
+        {
+            # Figure
+            "figure.facecolor": "white",
+            "figure.dpi": 100,
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "savefig.facecolor": "white",
+            # Font
+            "font.family": "serif",
+            "font.size": 11,
+            "axes.titlesize": 12,
+            "axes.labelsize": 11,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "legend.fontsize": 10,
+            # Axes
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": True,
+            "axes.axisbelow": True,
+            "grid.alpha": 0.3,
+            "grid.linestyle": "--",
+            # Lines
+            "lines.linewidth": 1.5,
+            "lines.markersize": 6,
+        }
     )
 
-    plt.title(title, fontsize=16)
-    plt.xlabel("Actions", fontsize=12)
-    plt.ylabel("States", fontsize=12)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
-    else:
-        plt.show()
-    plt.close()
+# Apply style on import
+setup_style()
 
 
-def plot_history(
-    history: Dict[str, List[float]],
+# =============================================================================
+# Q-Learning Plots
+# =============================================================================
+
+
+def plot_q_convergence(
+    history: dict[str, list[float]],
+    title: Optional[str] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot training history with loss and Q-value.
-
-    Args:
-        history: Dictionary with 'loss' and 'avg_q_value' lists.
-        save_path: Path to save figure (displays if None).
-    """
-    epochs = range(1, len(history["loss"]) + 1)
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-    # Plot loss
-    ax1.plot(epochs, history["loss"], "b-", label="Training Loss", linewidth=2)
-    ax1.set_xlabel("Epoch", fontsize=12)
-    ax1.set_ylabel("Loss", fontsize=12)
-    ax1.grid(True, alpha=0.3)
-    ax1.set_xlim(left=0)
-
-    # Plot average Q-value
-    ax2.plot(epochs, history["avg_q_value"], "r-", label="Avg Q-Value", linewidth=2)
-    ax2.set_xlabel("Epoch", fontsize=12)
-    ax2.set_ylabel("Average Q-Value", fontsize=12)
-    ax2.grid(True, alpha=0.3)
-    ax2.set_xlim(left=0)
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
-    else:
-        plt.show()
-    plt.close()
-
-
-def plot_single_q_learning(
-    history: Dict[str, List[float]],
-    save_path: Optional[Union[str, Path]] = None,
-) -> None:
-    """
-    Plot single Q-Learning training history.
+    Plot Q-Learning convergence curve.
 
     Args:
         history: Dictionary with 'avg_q_value' list.
+        title: Plot title (auto-generated if None).
         save_path: Path to save figure (displays if None).
     """
-    iterations = range(1, len(history["avg_q_value"]) + 1)
+    avg_q = history["avg_q_value"]
+    iterations = range(1, len(avg_q) + 1)
 
-    plt.figure(figsize=(8, 5))
-    plt.plot(iterations, history["avg_q_value"], "b-", linewidth=2)
-    plt.xlabel("Iteration", fontsize=12)
-    plt.ylabel("Average Q-Value", fontsize=12)
-    plt.grid(True, alpha=0.3)
-    plt.xlim(left=0)
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+
+    ax.plot(iterations, avg_q, color=COLORS["primary"], linewidth=1.5)
+    ax.fill_between(iterations, avg_q, alpha=0.15, color=COLORS["primary"])
+
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Mean Q-value")
+    ax.set_xlim(0, len(avg_q))
+    ax.set_ylim(bottom=0)
+
+    if title:
+        ax.set_title(title)
 
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
+        plt.savefig(save_path)
+        plt.close()
     else:
         plt.show()
-    plt.close()
+        plt.close()
 
 
-def plot_double_q_learning(
-    history: Dict[str, List[float]],
+def plot_q_heatmap(
+    matrix: NDArray[np.float64],
+    title: Optional[str] = None,
+    state_labels: Optional[List[str]] = None,
+    action_labels: Optional[List[str]] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot double Q-Learning training history.
+    Plot Q-table as annotated heatmap.
 
     Args:
-        history: Dictionary with 'avg_q_value_q1' and 'avg_q_value_q2' lists.
+        matrix: Q-table array (states x actions).
+        title: Plot title.
+        state_labels: Labels for states (y-axis).
+        action_labels: Labels for actions (x-axis).
         save_path: Path to save figure (displays if None).
     """
-    iterations = range(1, len(history["avg_q_value_q1"]) + 1)
+    state_labels = state_labels or STATE_LABELS[: matrix.shape[0]]
+    action_labels = action_labels or ACTION_LABELS[: matrix.shape[1]]
 
-    plt.figure(figsize=(8, 5))
-    plt.plot(iterations, history["avg_q_value_q1"], "b-", label="Avg Q-Value Q1", linewidth=2)
-    plt.plot(iterations, history["avg_q_value_q2"], "r-", label="Avg Q-Value Q2", linewidth=2)
-    plt.xlabel("Iteration", fontsize=12)
-    plt.ylabel("Average Q-Value", fontsize=12)
-    plt.grid(True, alpha=0.3)
-    plt.legend(fontsize=11)
-    plt.xlim(left=0)
+    # Mask zeros for better visualization
+    matrix_display = matrix.copy()
+    mask = matrix_display == 0
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+
+    sns.heatmap(
+        matrix_display,
+        annot=True,
+        fmt=".1f",
+        cmap="YlOrRd",
+        mask=mask,
+        cbar_kws={"label": "Q-value"},
+        xticklabels=action_labels,
+        yticklabels=state_labels,
+        linewidths=0.5,
+        linecolor="white",
+        ax=ax,
+    )
+
+    # Show zeros in gray
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            if mask[i, j]:
+                ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=True, color="#E0E0E0"))
+                ax.text(
+                    j + 0.5,
+                    i + 0.5,
+                    "0",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="#888888",
+                )
+
+    ax.set_xlabel("Action")
+    ax.set_ylabel("State")
+    ax.set_xticklabels(action_labels, rotation=45, ha="right")
+
+    if title:
+        ax.set_title(title)
 
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
+        plt.savefig(save_path)
+        plt.close()
     else:
         plt.show()
-    plt.close()
+        plt.close()
 
 
-def plot_rollout(
-    history: Dict[str, List[float]],
+# =============================================================================
+# Results Analysis Plots
+# =============================================================================
+
+
+def plot_gap_distribution(
+    gaps: List[float],
+    title: Optional[str] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot rollout evaluation results.
+    Plot distribution of optimality gaps using violin + strip plot.
 
     Args:
-        history: Dictionary with 'rewards' and 'length' lists.
+        gaps: List of gap percentages.
+        title: Plot title.
         save_path: Path to save figure (displays if None).
     """
-    n_simulations = len(history["rewards"])
-    simulations = range(1, n_simulations + 1)
+    fig, ax = plt.subplots(figsize=(6, 5))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    # Violin plot
+    parts = ax.violinplot(gaps, positions=[0], showmeans=True, showmedians=True)
 
-    # Plot rewards
-    ax1.plot(simulations, history["rewards"], "b-", linewidth=2, alpha=0.7)
-    ax1.set_xlabel("Simulation", fontsize=12)
-    ax1.set_ylabel("Total Reward", fontsize=12)
-    ax1.grid(True, alpha=0.3)
-    ax1.set_xlim(left=0)
+    # Style violin
+    for pc in parts["bodies"]:
+        pc.set_facecolor(COLORS["primary"])
+        pc.set_alpha(0.3)
+    parts["cmeans"].set_color(COLORS["secondary"])
+    parts["cmedians"].set_color(COLORS["tertiary"])
 
-    # Plot episode lengths
-    ax2.plot(simulations, history["length"], "r-", linewidth=2, alpha=0.7)
-    ax2.set_xlabel("Simulation", fontsize=12)
-    ax2.set_ylabel("Episode Length", fontsize=12)
-    ax2.grid(True, alpha=0.3)
-    ax2.set_xlim(left=0)
+    # Overlay strip plot for individual points
+    jitter = np.random.normal(0, 0.04, len(gaps))
+    ax.scatter(jitter, gaps, alpha=0.5, s=20, color=COLORS["primary"], edgecolor="white", linewidth=0.5)
+
+    ax.set_ylabel("Gap (%)")
+    ax.set_xticks([])
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    # Statistics annotation
+    mean_gap = np.mean(gaps)
+    median_gap = np.median(gaps)
+    ax.text(
+        0.95,
+        0.95,
+        f"Mean: {mean_gap:.2f}%\nMedian: {median_gap:.2f}%",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="#CCCCCC"),
+    )
+
+    if title:
+        ax.set_title(title)
 
     plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
+        plt.savefig(save_path)
+        plt.close()
     else:
         plt.show()
-    plt.close()
+        plt.close()
+
+
+def plot_gap_by_size(
+    gaps_by_size: dict[int, List[float]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot gap distribution grouped by instance size using box plots.
+
+    Args:
+        gaps_by_size: Dictionary mapping size -> list of gaps.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    sizes = sorted(gaps_by_size.keys())
+    data = [gaps_by_size[s] for s in sizes]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    bp = ax.boxplot(
+        data,
+        positions=range(len(sizes)),
+        widths=0.6,
+        patch_artist=True,
+        showmeans=True,
+        meanprops=dict(marker="D", markerfacecolor=COLORS["secondary"], markeredgecolor="white", markersize=5),
+    )
+
+    # Style boxes
+    for patch in bp["boxes"]:
+        patch.set_facecolor(COLORS["primary"])
+        patch.set_alpha(0.4)
+    for median in bp["medians"]:
+        median.set_color(COLORS["tertiary"])
+        median.set_linewidth(1.5)
+
+    ax.set_xticks(range(len(sizes)))
+    ax.set_xticklabels([str(s) for s in sizes])
+    ax.set_xlabel("Instance Size (cities)")
+    ax.set_ylabel("Gap (%)")
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_gap_comparison(
+    gaps_by_method: dict[str, List[float]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Compare gap distributions across methods using violin plots.
+
+    Args:
+        gaps_by_method: Dictionary mapping method name -> list of gaps.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    methods = list(gaps_by_method.keys())
+    data = [gaps_by_method[m] for m in methods]
+
+    fig, ax = plt.subplots(figsize=(max(6, len(methods) * 1.5), 5))
+
+    parts = ax.violinplot(data, positions=range(len(methods)), showmeans=True, showmedians=True)
+
+    # Style
+    colors = list(COLORS.values())
+    for i, pc in enumerate(parts["bodies"]):
+        pc.set_facecolor(colors[i % len(colors)])
+        pc.set_alpha(0.4)
+
+    parts["cmeans"].set_color("#333333")
+    parts["cmedians"].set_color("#333333")
+
+    ax.set_xticks(range(len(methods)))
+    ax.set_xticklabels(methods)
+    ax.set_ylabel("Gap (%)")
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+# =============================================================================
+# TSP Visualization
+# =============================================================================
 
 
 def plot_tour(
     coords: NDArray[np.float64],
     tour: List[int],
-    title: str = "TSP Tour",
+    title: Optional[str] = None,
+    highlight_depot: bool = True,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
@@ -215,25 +377,54 @@ def plot_tour(
         coords: Array of (x, y) coordinates.
         tour: Tour as list of city indices (0-based).
         title: Plot title.
+        highlight_depot: Whether to highlight the starting city.
         save_path: Path to save figure (displays if None).
     """
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    # Plot edges
     closed_tour = list(tour) + [tour[0]]
     xs = [coords[i][0] for i in closed_tour]
     ys = [coords[i][1] for i in closed_tour]
+    ax.plot(xs, ys, color=COLORS["primary"], linewidth=1.2, zorder=1)
 
-    plt.figure(figsize=(6, 6))
-    plt.plot(xs, ys, marker="o")
+    # Plot nodes
+    ax.scatter(
+        coords[:, 0],
+        coords[:, 1],
+        s=50,
+        c=COLORS["primary"],
+        edgecolor="white",
+        linewidth=1,
+        zorder=2,
+    )
 
-    for i, (x, y) in enumerate(coords):
-        plt.text(x, y, str(i), fontsize=10)
+    # Highlight depot
+    if highlight_depot and len(tour) > 0:
+        depot = tour[0]
+        ax.scatter(
+            coords[depot, 0],
+            coords[depot, 1],
+            s=100,
+            c=COLORS["secondary"],
+            edgecolor="white",
+            linewidth=1.5,
+            zorder=3,
+            marker="s",
+        )
 
-    plt.title(title)
-    plt.axis("equal")
-    plt.grid(True)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal")
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
 
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Plot saved to {save_path}")
+        plt.savefig(save_path)
+        plt.close()
     else:
         plt.show()
-    plt.close()
+        plt.close()
