@@ -136,11 +136,7 @@ def _lk_chain(
     max_depth: int,
     dist: NDArray[np.float64],
 ) -> tuple[list[int], float]:
-    """
-    Explore LK chain from a starting position using iterative approach.
-
-    Returns (best_tour, best_gain) found.
-    """
+    """Explore LK chain from start_pos. Returns (best_tour, best_gain)."""
     n = len(tour) - 1
     best_tour = tour
     best_gain = 0.0
@@ -189,19 +185,7 @@ def _two_opt_gain(
     j: int,
     dist_matrix: NDArray[np.float64],
 ) -> float:
-    """
-    Calculate gain (cost reduction) from a 2-opt move.
-
-    The move reverses tour[i:j].
-
-    Args:
-        tour: Closed tour [c0, ..., cn-1, c0].
-        i, j: Positions in 1..n-1 (i != j).
-        dist_matrix: Distance matrix.
-
-    Returns:
-        Gain (positive = improvement).
-    """
+    """Return gain (positive = improvement) from reversing tour[i:j]."""
     if i > j:
         i, j = j, i
     # Gain is negative of delta (delta < 0 means improvement)
@@ -209,16 +193,7 @@ def _two_opt_gain(
 
 
 def _apply_two_opt(tour: list[int], i: int, j: int) -> list[int]:
-    """
-    Apply 2-opt move to tour.
-
-    Args:
-        tour: Input tour.
-        i, j: Positions to swap.
-
-    Returns:
-        New tour with segment reversed.
-    """
+    """Return new tour with segment [i:j] reversed."""
     if i > j:
         i, j = j, i
 

@@ -9,15 +9,7 @@ from src.tsp.instance import TSPInstance
 
 
 def random_tour(problem: TSPInstance) -> tuple[list[int], float]:
-    """
-    Generate a random tour.
-
-    Args:
-        problem: TSP instance.
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+    """Generate a random tour. Returns (closed_tour, cost)."""
     nodes = list(problem.get_nodes())
     n = len(nodes)
 
@@ -40,16 +32,7 @@ def nearest_neighbor(
     problem: TSPInstance,
     start_node: int | None = None,
 ) -> tuple[list[int], float]:
-    """
-    Generate tour using nearest neighbor heuristic.
-
-    Args:
-        problem: TSP instance.
-        start_node: Starting node (random if None).
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+    """Nearest neighbor heuristic. Returns (closed_tour, cost)."""
     n = problem.dimension
     if start_node is None:
         start_node = random.choice(list(problem.get_nodes()))
@@ -79,19 +62,7 @@ def cheapest_insertion(
     problem: TSPInstance,
     start_node: int | None = None,
 ) -> tuple[list[int], float]:
-    """
-    Generate tour using cheapest insertion heuristic.
-
-    Starts with a 2-node cycle and iteratively inserts the node
-    that causes minimum cost increase.
-
-    Args:
-        problem: TSP instance.
-        start_node: Starting node (random if None).
-
-    Returns:
-        Tuple of (closed_tour, cost).
-    """
+    """Cheapest insertion heuristic. Returns (closed_tour, cost)."""
     nodes = list(problem.get_nodes())
     n = len(nodes)
 

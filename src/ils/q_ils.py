@@ -89,12 +89,6 @@ class QILS:
     """
 
     def __init__(self, problem: TSPInstance) -> None:
-        """
-        Initialize Q-ILS solver.
-
-        Args:
-            problem: TSP instance to solve.
-        """
         self.problem = problem
         # Reuse precomputed distance matrix from instance (already 0-based)
         self.dist_matrix = problem.dist_matrix
@@ -107,25 +101,11 @@ class QILS:
         self.last_state: Optional[State] = None
 
     def load_q_table(self, path: Union[str, Path]) -> None:
-        """
-        Load Q-table from file.
-
-        Args:
-            path: Path to Q-table text file.
-        """
+        """Load Q-table from file."""
         self.q_table = QTable.from_txt(path)
 
     def get_state(self, cost: float, opt_cost: float) -> tuple[State, int]:
-        """
-        Map current cost to discrete state based on gap percentage.
-
-        Args:
-            cost: Current solution cost.
-            opt_cost: Optimal (or best known) cost.
-
-        Returns:
-            Tuple of (state, reward).
-        """
+        """Map cost to discrete state based on gap %. Returns (state, reward)."""
         gap = ((cost - opt_cost) / opt_cost) * 100
         gap = round(gap, 7)
 
@@ -208,12 +188,7 @@ class QILS:
         return LOCAL_SEARCHES[ls_type](solution)
 
     def _get_initial_solution(self) -> Solution:
-        """
-        Generate initial solution using random constructive heuristic.
-
-        Returns:
-            Initial solution improved by 2-opt.
-        """
+        """Generate initial solution via random constructive + 2-opt."""
         constructive_choice = random.choice(list(CONSTRUCTIVES.keys()))
         tour, _ = CONSTRUCTIVES[constructive_choice](self.problem)
         initial_solution = Solution(tour, self.dist_matrix, is_closed=True)

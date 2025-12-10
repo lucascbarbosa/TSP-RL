@@ -9,17 +9,7 @@ from src.tsp.solution import Solution
 
 
 def two_swap(solution: Solution) -> Solution:
-    """
-    Swap two random internal vertices.
-
-    Light perturbation that maintains most of the tour structure.
-
-    Args:
-        solution: Input solution (closed tour).
-
-    Returns:
-        Perturbed solution.
-    """
+    """Swap two random internal vertices (light perturbation)."""
     tour = solution.tour[:]
     n = len(tour) - 1  # number of actual cities
 
@@ -37,17 +27,7 @@ def two_swap(solution: Solution) -> Solution:
 
 
 def segment_reverse(solution: Solution) -> Solution:
-    """
-    Reverse a random segment of the tour.
-
-    Stronger perturbation than two_swap.
-
-    Args:
-        solution: Input solution (closed tour).
-
-    Returns:
-        Perturbed solution.
-    """
+    """Reverse a random segment (stronger perturbation than two_swap)."""
     tour = solution.tour[:]
     n = len(tour) - 1
 

@@ -79,13 +79,7 @@ class QTable:
         factor: float = 0.995,
         min_epsilon: float = 0.01,
     ) -> None:
-        """
-        Decay exploration rate.
-
-        Args:
-            factor: Multiplicative decay factor.
-            min_epsilon: Minimum epsilon value.
-        """
+        """Decay exploration rate by factor, clamped to min_epsilon."""
         self.epsilon = max(min_epsilon, self.epsilon * factor)
 
     def to_txt(self, filename: Union[str, Path]) -> None:
@@ -135,7 +129,7 @@ class QTable:
         return cls(n_states=n_states, n_actions=n_actions, table=table)
 
     def copy(self) -> QTable:
-        """Create a deep copy of this Q-Table."""
+        """Deep copy."""
         return QTable(
             n_states=self.n_states,
             n_actions=self.n_actions,

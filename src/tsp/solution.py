@@ -35,14 +35,13 @@ class Solution:
 
     @property
     def cost(self) -> float:
-        """Return tour cost, computing lazily if needed."""
+        """Tour cost (lazy-computed on first access)."""
         if self._cost is None:
             self._cost = self._compute_cost()
         return self._cost
 
     @cost.setter
     def cost(self, value: float) -> None:
-        """Allow setting cost directly (for delta updates)."""
         self._cost = value
 
     def _compute_cost(self) -> float:
@@ -82,7 +81,7 @@ class Solution:
         return cost
 
     def copy(self) -> Solution:
-        """Create a deep copy of this solution, preserving computed cost."""
+        """Deep copy preserving computed cost."""
         return Solution(self.tour, self.dist_matrix, self.is_closed, self._cost)
 
     def __repr__(self) -> str:

@@ -95,7 +95,7 @@ DISTANCE_METRICS: dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]
 
 
 def _infer_edge_weight_type(path: Union[str, Path]) -> str:
-    """Infer edge weight type from file path (e.g., 'data/GEO.json' -> 'GEO')."""
+    """Infer edge weight type from filename (e.g., 'GEO.json' -> 'GEO')."""
     stem = Path(path).stem.upper()
     if stem in DISTANCE_METRICS:
         return stem
@@ -169,20 +169,11 @@ class TSPInstance:
             self.opt_tour = None
 
     def get_nodes(self) -> range:
-        """Return node indices {1, 2, ..., n}."""
+        """Node indices {1, ..., n}."""
         return range(1, self.n + 1)
 
     def get_weight(self, i: int, j: int) -> float:
-        """
-        Get distance between nodes i and j (1-based indexing).
-
-        Args:
-            i: First node (1-based).
-            j: Second node (1-based).
-
-        Returns:
-            Distance between nodes.
-        """
+        """Distance between nodes i and j (1-based)."""
         return float(self.dist_matrix[i - 1, j - 1])
 
 
