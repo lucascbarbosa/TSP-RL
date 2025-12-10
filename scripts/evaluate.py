@@ -83,9 +83,14 @@ def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[
 
 # Configuration
 DEFAULT_OUTPUT = "data/results/results.csv"
-DEFAULT_WORKERS = 10
 DEFAULT_MAX_ITER = 50
 DEFAULT_EPSILON = 0.1
+
+
+def get_default_workers() -> int:
+    """Return cpu_count - 2, minimum 1."""
+    return max(1, os.cpu_count() - 2)
+
 
 # Thread-safe file writing
 csv_lock = threading.Lock()
@@ -205,8 +210,8 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=DEFAULT_WORKERS,
-        help=f"Number of worker threads (default: {DEFAULT_WORKERS})",
+        default=None,
+        help="Number of worker threads (default: cpu_count - 2)",
     )
     parser.add_argument(
         "--max_iter",
@@ -284,10 +289,12 @@ def main() -> None:
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
 
-    print(f"Starting evaluation of {len(jobs)} instances with {args.workers} threads...")
+    # Resolve workers: use cli arg or default to cpu_count - 2
+    num_workers = args.workers if args.workers is not None else get_default_workers()
+    print(f"Starting evaluation of {len(jobs)} instances with {num_workers} threads...")
 
     # Run parallel evaluation
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
         executor.map(process_instance, jobs)
 
     print("Evaluation complete.")
