@@ -1,8 +1,5 @@
-gurobipy
-lkh
-matplotlib
-networkx
 numpy
-pandas
-python-tsp
 torch
+matplotlib
+seaborn
+tqdm

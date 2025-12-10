@@ -108,7 +108,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Ensure output directory exists
-    os.makedirs(args.output_dir, exist_ok=True)
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # Load splits
     print(f"Loading split from: {args.split_path}")

@@ -85,7 +85,9 @@ def main():
         print(f"  Test:   {len(test_ids)} ({len(test_ids)/n_instances*100:.1f}%)")
 
     # Save
-    with open(args.output, "w") as f:
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
         json.dump(splits, f, indent=2)
 
     print(f"\nSplits saved to {args.output}")

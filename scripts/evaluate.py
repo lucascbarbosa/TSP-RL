@@ -74,7 +74,7 @@ def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[
 
 
 # Configuration
-DEFAULT_OUTPUT = "results.csv"
+DEFAULT_OUTPUT = "data/results/results.csv"
 DEFAULT_WORKERS = 10
 DEFAULT_MAX_ITER = 50
 DEFAULT_EPSILON = 0.1
@@ -98,6 +98,8 @@ def get_processed_instances(filename: str) -> Set[str]:
 
 def initialize_csv(filename: str) -> None:
     """Create CSV file with header if it doesn't exist."""
+    # Ensure parent directory exists
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
     if not os.path.isfile(filename):
         with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
@@ -180,6 +182,13 @@ def main() -> None:
         help="Instance types to evaluate (default: EUC_2D GEO ATT)",
     )
     parser.add_argument(
+        "--sizes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Instance sizes to evaluate (default: all available Q-tables)",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default=DEFAULT_OUTPUT,
@@ -233,6 +242,10 @@ def main() -> None:
         if not available_sizes:
             print(f"Warning: No Q-tables found for {instance_type}, skipping...")
             continue
+
+        # Filter by requested sizes if specified
+        if args.sizes is not None:
+            available_sizes = available_sizes & set(args.sizes)
 
         test_instances = splits[key]["test"]
 
