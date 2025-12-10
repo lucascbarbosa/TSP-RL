@@ -75,22 +75,41 @@ TSP-RL/
 │       ├── mdp.py               # Construção do MDP
 │       └── transition.py        # Carga de transições
 ├── scripts/
-│   ├── evaluate.py              # Avaliação com Q-table treinada
+│   ├── generate_splits.py       # Gera splits train/test
 │   ├── train_transitions.py     # Geração de transições (paralelo)
 │   ├── train_qtable.py          # Treinamento de Q-tables
-│   └── generate_splits.py       # Gera splits train/test
+│   ├── evaluate.py              # Avaliação com Q-table treinada
+│   ├── clear.sh                 # Remove arquivos gerados
+│   └── exemplos.sh              # Pipeline de exemplo (subconjunto pequeno)
 ├── utils/
 │   └── plot.py                  # Visualizações
 ├── data/
 │   ├── EUC_2D.json              # Instâncias euclidianas
 │   ├── ATT.json                 # Instâncias ATT
 │   ├── GEO.json                 # Instâncias geográficas
-│   ├── splits.json              # Divisão treino/teste (90/10, seed=42)
-│   ├── q_tables/                # Q-tables treinadas
-│   └── train/                   # Dados de transição (gitignored)
+│   ├── splits.json              # Divisão treino/teste (gerado)
+│   ├── train/                   # Dados de transição (gerado)
+│   ├── q_tables/                # Q-tables treinadas (gerado)
+│   ├── plots/                   # Gráficos de treinamento (gerado)
+│   └── results/                 # Resultados de avaliação (gerado)
 └── etc/
     ├── plantuml/                # Diagramas do framework
     └── slides/                  # Apresentação
+```
+
+## Quickstart
+
+Para rodar o pipeline completo em um subconjunto pequeno (tipos EUC_2D/ATT/GEO, tamanhos 10/20, 100 instâncias por par):
+
+```bash
+./scripts/exemplos.sh
+```
+
+Para limpar todos os arquivos gerados:
+
+```bash
+./scripts/clear.sh          # dry-run (mostra o que seria deletado)
+./scripts/clear.sh --force  # deleta de fato
 ```
 
 ## Fluxo de Execução
@@ -100,7 +119,10 @@ TSP-RL/
 Executa ILS com escolhas aleatórias de (perturbação, busca local), registrando tuplas `(s, a, r, s')`:
 
 ```bash
-python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/EUC_2D.json --output_dir data/train/EUC_2D
+python scripts/train_transitions.py --help
+python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/EUC_2D.json --output_dir data/train/EUC_2D --limit 3333
+python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/ATT.json --output_dir data/train/ATT --limit 3333
+python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/GEO.json --output_dir data/train/GEO --limit 3333
 ```
 
 ### 2. Treinamento da Q-table
@@ -108,7 +130,8 @@ python scripts/train_transitions.py --split_path data/splits.json --dataset_path
 Constrói o MDP a partir das transições e treina via Q-Learning:
 
 ```bash
-python scripts/train_qtable.py --types EUC_2D --sizes 10 20 30
+python scripts/train_qtable.py --help
+python scripts/train_qtable.py --types EUC_2D ATT GEO --sizes 10 20 30
 ```
 
 ### 3. Avaliação
@@ -116,7 +139,8 @@ python scripts/train_qtable.py --types EUC_2D --sizes 10 20 30
 Executa o ILS guiado pela Q-table em instâncias de teste:
 
 ```bash
-python scripts/evaluate.py --types EUC_2D GEO ATT
+python scripts/evaluate.py --help
+python scripts/evaluate.py --types EUC_2D ATT GEO --sizes 10 20 30 --workers 16
 ```
 
 ## Componentes
