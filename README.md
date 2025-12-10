@@ -112,6 +112,15 @@ Para limpar todos os arquivos gerados:
 ./scripts/clear.sh --force  # deleta de fato
 ```
 
+### Paralelismo
+
+Os scripts `train_transitions.py` e `evaluate.py` usam por padrão `cpu_count - 2` workers. Para sobrescrever:
+
+```bash
+python scripts/train_transitions.py ... --workers 8
+python scripts/evaluate.py ... --workers 8
+```
+
 ## Fluxo de Execução
 
 ### 1. Geração de Transições (offline)

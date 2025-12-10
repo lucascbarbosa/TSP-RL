@@ -21,15 +21,12 @@ def _euc_2d(coords: NDArray[np.float64]) -> NDArray[np.float64]:
     Euclidean distance (double precision, no rounding).
 
     Used for generated instances with coords in [0,1]².
+    Vectorized implementation: O(n²) memory, but ~10-20x faster than loops.
     """
-    n = len(coords)
-    dist = np.zeros((n, n), dtype=np.float64)
-    for i in range(n):
-        for j in range(i + 1, n):
-            dx = coords[i, 0] - coords[j, 0]
-            dy = coords[i, 1] - coords[j, 1]
-            dist[i, j] = dist[j, i] = math.sqrt(dx * dx + dy * dy)
-    return dist
+    # Compute pairwise differences: diff[i,j,k] = coords[i,k] - coords[j,k]
+    diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+    # Sum of squared differences along coordinate axis, then sqrt
+    return np.sqrt(np.sum(diff * diff, axis=2))
 
 
 def _att(coords: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -38,21 +35,18 @@ def _att(coords: NDArray[np.float64]) -> NDArray[np.float64]:
 
     Special scaling by 1/sqrt(10) with conditional rounding.
     Used for att48, att532 etc. from TSPLIB.
+    Vectorized implementation.
     """
-    n = len(coords)
-    dist = np.zeros((n, n), dtype=np.float64)
-    for i in range(n):
-        for j in range(i + 1, n):
-            xd = coords[i, 0] - coords[j, 0]
-            yd = coords[i, 1] - coords[j, 1]
-            rij = math.sqrt((xd * xd + yd * yd) / 10.0)
-            tij = int(rij + 0.5)
-            if tij < rij:
-                dij = tij + 1
-            else:
-                dij = tij
-            dist[i, j] = dist[j, i] = dij
-    return dist
+    # Pairwise squared differences
+    diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+    sum_sq = np.sum(diff * diff, axis=2)
+
+    # ATT formula: rij = sqrt(sum_sq / 10), tij = round(rij)
+    rij = np.sqrt(sum_sq / 10.0)
+    tij = np.floor(rij + 0.5)  # int(x + 0.5) = floor(x + 0.5)
+
+    # dij = tij + 1 if tij < rij else tij
+    return np.where(tij < rij, tij + 1, tij)
 
 
 def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -61,33 +55,35 @@ def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
 
     Coordinates are in TSPLIB degree format (DDD.MM where MM is minutes).
     Used for ulysses16, ulysses22 etc. from TSPLIB.
+    Vectorized implementation.
     """
-    n = len(coords)
     RRR = 6378.388  # Earth radius in km
     PI = 3.141592
 
-    # Convert TSPLIB degree format to radians
-    lats = np.zeros(n)
-    lons = np.zeros(n)
-    for i in range(n):
-        deg_lat = int(coords[i, 0])
-        min_lat = coords[i, 0] - deg_lat
-        lats[i] = PI * (deg_lat + 5.0 * min_lat / 3.0) / 180.0
+    # Convert TSPLIB degree format to radians (vectorized)
+    deg = np.floor(coords)
+    minutes = coords - deg
+    radians = PI * (deg + 5.0 * minutes / 3.0) / 180.0
 
-        deg_lon = int(coords[i, 1])
-        min_lon = coords[i, 1] - deg_lon
-        lons[i] = PI * (deg_lon + 5.0 * min_lon / 3.0) / 180.0
+    lats = radians[:, 0]  # shape (n,)
+    lons = radians[:, 1]  # shape (n,)
 
-    # Compute great-circle distances
-    dist = np.zeros((n, n), dtype=np.float64)
-    for i in range(n):
-        for j in range(i + 1, n):
-            q1 = math.cos(lons[i] - lons[j])
-            q2 = math.cos(lats[i] - lats[j])
-            q3 = math.cos(lats[i] + lats[j])
-            dij = int(RRR * math.acos(0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3)) + 1.0)
-            dist[i, j] = dist[j, i] = dij
-    return dist
+    # Compute pairwise differences for great-circle formula
+    # q1 = cos(lon_i - lon_j), q2 = cos(lat_i - lat_j), q3 = cos(lat_i + lat_j)
+    lon_diff = lons[:, np.newaxis] - lons[np.newaxis, :]  # (n, n)
+    lat_diff = lats[:, np.newaxis] - lats[np.newaxis, :]  # (n, n)
+    lat_sum = lats[:, np.newaxis] + lats[np.newaxis, :]  # (n, n)
+
+    q1 = np.cos(lon_diff)
+    q2 = np.cos(lat_diff)
+    q3 = np.cos(lat_sum)
+
+    # Great-circle distance formula
+    # Clamp argument to [-1, 1] to avoid numerical issues with arccos
+    arg = 0.5 * ((1.0 + q1) * q2 - (1.0 - q1) * q3)
+    arg = np.clip(arg, -1.0, 1.0)
+
+    return np.floor(RRR * np.arccos(arg) + 1.0)
 
 
 # Registry: edge_weight_type -> distance function

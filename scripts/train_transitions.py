@@ -112,6 +112,12 @@ def main() -> None:
         default=50,
         help="Max iterations without improvement (default: 50)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: cpu_count - 2)",
+    )
     args = parser.parse_args()
 
     # Ensure output directory exists
@@ -157,8 +163,8 @@ def main() -> None:
     print(f"Loading dataset: {args.dataset_path} with {len(train_ids)} instances...")
     train_set = TSPDataset(args.dataset_path, train_ids)
 
-    # Setup multiprocessing
-    num_cores = max(1, multiprocessing.cpu_count() - 2)
+    # Setup multiprocessing: use cli arg or default to cpu_count - 2
+    num_cores = args.workers if args.workers is not None else max(1, multiprocessing.cpu_count() - 2)
     print(f"\n--- Starting Transition Generation on {num_cores} cores ---")
     print(f"Saving results to: {args.output_dir}")
     print(f"Max iterations per instance: {args.max_iter}\n")
@@ -170,7 +176,9 @@ def main() -> None:
         max_iter=args.max_iter,
     )
 
-    with ProcessPoolExecutor(max_workers=num_cores) as executor:
+    # Use 'spawn' context to avoid CUDA re-initialization issues with fork
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=num_cores, mp_context=ctx) as executor:
         results = list(
             tqdm(
                 executor.map(worker_func, train_set),

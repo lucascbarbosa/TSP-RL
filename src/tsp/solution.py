@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,20 +15,35 @@ class Solution:
     Attributes:
         tour: List of city indices (1-based). Closed tour: [c1, ..., cn, c1].
         dist_matrix: Distance matrix (n x n), indexed 0..n-1.
-        cost: Total tour cost.
+        cost: Total tour cost (lazy-computed if not provided).
         is_closed: Whether the tour is closed (last == first).
     """
+
+    __slots__ = ("tour", "dist_matrix", "is_closed", "_cost")
 
     def __init__(
         self,
         tour: List[int],
         dist_matrix: NDArray[np.float64],
         is_closed: bool = True,
+        cost: Optional[float] = None,
     ) -> None:
         self.dist_matrix = dist_matrix
         self.is_closed = is_closed
         self.tour = tour[:]  # defensive copy
-        self.cost = self._compute_cost()
+        self._cost: Optional[float] = cost  # lazy: None means not computed yet
+
+    @property
+    def cost(self) -> float:
+        """Return tour cost, computing lazily if needed."""
+        if self._cost is None:
+            self._cost = self._compute_cost()
+        return self._cost
+
+    @cost.setter
+    def cost(self, value: float) -> None:
+        """Allow setting cost directly (for delta updates)."""
+        self._cost = value
 
     def _compute_cost(self) -> float:
         return self.compute_cost_static(self.tour, self.dist_matrix, self.is_closed)
@@ -67,8 +82,8 @@ class Solution:
         return cost
 
     def copy(self) -> Solution:
-        """Create a deep copy of this solution."""
-        return Solution(self.tour, self.dist_matrix, self.is_closed)
+        """Create a deep copy of this solution, preserving computed cost."""
+        return Solution(self.tour, self.dist_matrix, self.is_closed, self._cost)
 
     def __repr__(self) -> str:
         return f"Solution(cost={self.cost:.2f}, tour_len={len(self.tour)})"

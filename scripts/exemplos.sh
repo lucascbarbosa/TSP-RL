@@ -4,7 +4,7 @@
 #
 # Executa o pipeline completo em um subconjunto pequeno:
 # - Tipos: EUC_2D, ATT, GEO
-# - Tamanhos: 10, 20
+# - Tamanhos: 10, 20, 30
 # - Limite: 100 instâncias por (tipo, tamanho)
 #
 # Usage:
@@ -33,7 +33,7 @@ echo ""
 
 # Configuration
 TYPES="EUC_2D ATT GEO"
-SIZES="10 20"
+SIZES="10 20 30"
 LIMIT=100
 
 echo "Configuração:"
