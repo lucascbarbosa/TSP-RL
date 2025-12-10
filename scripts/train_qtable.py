@@ -16,9 +16,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import argparse
+import csv
 import json
 import re
 import shutil
+import time
 from pathlib import Path
 
 from tqdm import tqdm
@@ -109,6 +111,9 @@ def main() -> None:
     with open(args.splits, "r") as f:
         splits = json.load(f)
 
+    # Training log
+    training_log: list[dict] = []
+
     # Process each instance type
     for instance_type in tqdm(args.types, desc="Instance types", ncols=120):
         plots_dir = Path(f"data/plots/{instance_type}")
@@ -150,6 +155,7 @@ def main() -> None:
             if not paths:
                 continue
 
+            t_start = time.perf_counter()
             q_table, history = train_q_table_from_paths(
                 paths,
                 gamma=args.gamma,
@@ -158,6 +164,20 @@ def main() -> None:
                 min_n_actions=8,  # 8 actions (5 perturbations x 2 local searches, with omissions)
                 min_n_states=5,  # 5 states (gap-based)
             )
+            train_time_ms = (time.perf_counter() - t_start) * 1000
+
+            # Record training stats
+            iterations_used = len(history.get("avg_q_value", []))
+            final_avg_q = history["avg_q_value"][-1] if history.get("avg_q_value") else 0.0
+            training_log.append({
+                "type": instance_type,
+                "size": n_cities,
+                "n_files": len(paths),
+                "iterations": iterations_used,
+                "time_ms": train_time_ms,
+                "final_avg_q": final_avg_q,
+                "gamma": args.gamma,
+            })
 
             # Save Q-table
             q_table.to_txt(f"{q_tables_dir}/instance_size_{n_cities:02d}.txt")
@@ -178,7 +198,17 @@ def main() -> None:
                     save_path=heatmap_path,
                 )
 
-    print("\nDone.")
+    # Save training log
+    if training_log:
+        log_path = Path("data/q_tables/training_log.csv")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=training_log[0].keys())
+            writer.writeheader()
+            writer.writerows(training_log)
+        print(f"\nTraining log saved to {log_path}")
+
+    print("Done.")
 
 
 if __name__ == "__main__":

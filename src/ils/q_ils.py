@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import random
+import time
+from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from typing import Optional, Union
@@ -16,6 +18,51 @@ from src.tsp.local_search import LOCAL_SEARCHES, two_opt
 from src.tsp.perturbation import PERTURBATIONS
 from src.tsp.solution import Solution
 from src.rl.q_table import QTable
+
+
+@dataclass
+class RunStats:
+    """Statistics from a Q-ILS run."""
+
+    # Timing
+    total_time_ms: float = 0.0
+    init_time_ms: float = 0.0  # Time for initial solution
+
+    # Iterations
+    total_iterations: int = 0
+    best_iteration: int = 0  # Iteration where best solution was found
+    improvements: int = 0  # Number of improvements found
+
+    # Solution quality
+    initial_cost: float = 0.0
+    initial_gap: float = 0.0  # Gap % of initial solution
+    final_cost: float = 0.0
+    final_gap: float = 0.0
+
+    # Action/state distribution
+    action_counts: dict[str, int] = field(default_factory=dict)
+    state_counts: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """Convert to flat dictionary for CSV export."""
+        d = {
+            "total_time_ms": self.total_time_ms,
+            "init_time_ms": self.init_time_ms,
+            "total_iterations": self.total_iterations,
+            "best_iteration": self.best_iteration,
+            "improvements": self.improvements,
+            "initial_cost": self.initial_cost,
+            "initial_gap": self.initial_gap,
+            "final_cost": self.final_cost,
+            "final_gap": self.final_gap,
+        }
+        # Flatten action counts
+        for action in Action:
+            d[f"action_{action.name}"] = self.action_counts.get(action.name, 0)
+        # Flatten state counts
+        for state in State:
+            d[f"state_{state.name}"] = self.state_counts.get(state.name, 0)
+        return d
 
 
 class State(IntEnum):
@@ -99,6 +146,7 @@ class QILS:
         self.q_table: Optional[QTable] = None
         self.last_action: Optional[Action] = None
         self.last_state: Optional[State] = None
+        self.last_stats: Optional[RunStats] = None
 
     def load_q_table(self, path: Union[str, Path]) -> None:
         """Load Q-table from file."""
@@ -269,7 +317,7 @@ class QILS:
             verbose: Print progress information.
 
         Returns:
-            Best solution found.
+            Best solution found. Access self.last_stats for detailed metrics.
 
         Raises:
             ValueError: If opt_cost is invalid or Q-table not loaded.
@@ -280,17 +328,38 @@ class QILS:
         if self.q_table is None:
             raise ValueError("Q-table not loaded. Call load_q_table() first.")
 
+        # Initialize stats
+        stats = RunStats()
+        stats.action_counts = {a.name: 0 for a in Action}
+        stats.state_counts = {s.name: 0 for s in State}
+
+        # Track total time
+        t_start = time.perf_counter()
+
+        # Generate initial solution
+        t_init = time.perf_counter()
         ls_solution = self._get_initial_solution()
         best_solution = ls_solution.copy()
+        stats.init_time_ms = (time.perf_counter() - t_init) * 1000
+
+        # Record initial solution quality
+        stats.initial_cost = ls_solution.cost
+        stats.initial_gap = ((ls_solution.cost - opt_cost) / opt_cost) * 100
 
         iter_without_improvement = 0
+        iteration = 0
+        best_iteration = 0
 
         while iter_without_improvement < max_iter:
+            iteration += 1
+
             # Observe current state
             i_state, _ = self.get_state(ls_solution.cost, opt_cost)
+            stats.state_counts[i_state.name] += 1
 
             # Select action via Q-table
             action = self.choose_action(i_state, epsilon=epsilon)
+            stats.action_counts[action.name] += 1
             self.last_action = action
             self.last_state = i_state
 
@@ -302,6 +371,8 @@ class QILS:
             # Acceptance criterion
             if new_solution.cost < best_solution.cost:
                 best_solution = new_solution.copy()
+                best_iteration = iteration
+                stats.improvements += 1
                 iter_without_improvement = 0
             else:
                 iter_without_improvement += 1
@@ -316,4 +387,12 @@ class QILS:
                     f"best_cost={best_solution.cost:.4f}"
                 )
 
+        # Finalize stats
+        stats.total_time_ms = (time.perf_counter() - t_start) * 1000
+        stats.total_iterations = iteration
+        stats.best_iteration = best_iteration
+        stats.final_cost = best_solution.cost
+        stats.final_gap = ((best_solution.cost - opt_cost) / opt_cost) * 100
+
+        self.last_stats = stats
         return best_solution

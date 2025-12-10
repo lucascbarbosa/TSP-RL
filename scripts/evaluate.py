@@ -21,7 +21,6 @@ import json
 import multiprocessing
 import os
 import re
-import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -112,9 +111,20 @@ def initialize_csv(filename: str) -> None:
     if not os.path.isfile(filename):
         with open(filename, mode="w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(
-                ["Full ID", "Name", "ID", "Type", "Dimension", "Optimal Cost", "Best Cost", "Gap", "Time", "Best Tour"]
-            )
+            writer.writerow([
+                # Instance info
+                "Full ID", "Name", "ID", "Type", "Dimension",
+                # Solution quality
+                "Optimal Cost", "Best Cost", "Gap",
+                # Timing (ms)
+                "Time (ms)", "Init Time (ms)",
+                # Iteration stats
+                "Total Iterations", "Best Iteration", "Improvements",
+                # Initial solution
+                "Initial Cost", "Initial Gap",
+                # Best tour
+                "Best Tour",
+            ])
 
 
 def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
@@ -146,32 +156,45 @@ def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
         q_table_path = f"data/q_tables/{instance_type}/instance_size_{problem.dimension:02d}.txt"
         solver.load_q_table(q_table_path)
 
-        # Run Q-ILS
-        time_start = time.time()
+        # Run Q-ILS (stats are collected internally)
         best_solution = solver.run(
             max_iter=max_iter,
             opt_cost=opt_cost,
             epsilon=epsilon,
             verbose=False,
         )
-        exec_time = time.time() - time_start
 
-        # Calculate gap
-        gap_value = ((best_solution.cost - opt_cost) / opt_cost) * 100
+        # Get stats from solver
+        stats = solver.last_stats
         full_id = f"{instance_type}{instance_id}"
 
-        print(f"DONE: {full_id} | Gap: {gap_value:.2f}% | Time: {exec_time:.2f}s")
+        print(
+            f"DONE: {full_id} | Gap: {stats.final_gap:.2f}% | "
+            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}"
+        )
 
         return [
+            # Instance info
             full_id,
             problem.name,
             instance_id,
             instance_type,
             problem.dimension,
+            # Solution quality
             opt_cost,
             best_solution.cost,
-            f"{gap_value:.4f}%",
-            exec_time,
+            f"{stats.final_gap:.4f}%",
+            # Timing (ms)
+            f"{stats.total_time_ms:.2f}",
+            f"{stats.init_time_ms:.2f}",
+            # Iteration stats
+            stats.total_iterations,
+            stats.best_iteration,
+            stats.improvements,
+            # Initial solution
+            f"{stats.initial_cost:.4f}",
+            f"{stats.initial_gap:.4f}%",
+            # Best tour
             str(best_solution.tour),
         ]
 
