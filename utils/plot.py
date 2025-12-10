@@ -125,9 +125,7 @@ def load_results_from_csv(
     Returns:
         Nested dict: {instance_type: {size: {"gaps": [...], "times": [...], ...}}}
     """
-    data: Dict[str, Dict[int, Dict[str, List]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(list))
-    )
+    data: Dict[str, Dict[int, Dict[str, List]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
     with open(csv_path, "r", newline="") as f:
         reader = csv.DictReader(f)
@@ -155,10 +153,7 @@ def load_results_from_csv(
             data[instance_type][dimension]["iterations"].append(iterations)
 
     # Convert defaultdicts to regular dicts
-    return {
-        t: {s: dict(metrics) for s, metrics in sizes.items()}
-        for t, sizes in data.items()
-    }
+    return {t: {s: dict(metrics) for s, metrics in sizes.items()} for t, sizes in data.items()}
 
 
 def generate_gap_violin_plots(

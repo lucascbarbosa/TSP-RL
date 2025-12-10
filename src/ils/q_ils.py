@@ -309,16 +309,19 @@ class QILS:
         epsilon: float = 0.0,
         verbose: bool = True,
         early_stop: bool = True,
+        early_stop_target: Optional[float] = None,
     ) -> Solution:
         """
         Run Q-ILS using the learned Q-table.
 
         Args:
             max_iter: Maximum iterations without improvement.
-            opt_cost: Optimal cost for state calculation.
+            opt_cost: Optimal cost for state calculation and gap reporting.
             epsilon: Exploration rate for action selection.
             verbose: Print progress information.
-            early_stop: Stop early when reaching opt_cost (gap <= 0).
+            early_stop: Stop early when reaching target cost.
+            early_stop_target: Target cost for early stop (default: opt_cost).
+                Use lower_bound when mip_gap > 0, or None to disable.
 
         Returns:
             Best solution found. Access self.last_stats for detailed metrics.
@@ -379,11 +382,13 @@ class QILS:
                 stats.improvements += 1
                 iter_without_improvement = 0
 
-                # Early stop: check if we reached the target (gap <= 0)
-                if early_stop and best_solution.cost <= opt_cost:
+                # Early stop: check if we reached the target
+                # Use early_stop_target if provided, else opt_cost
+                target = early_stop_target if early_stop_target is not None else opt_cost
+                if early_stop and early_stop_target is not None and best_solution.cost <= target:
                     stats.early_stopped = True
                     if verbose:
-                        print(f"[Q-ILS] Early stop: reached target cost {opt_cost:.4f}")
+                        print(f"[Q-ILS] Early stop: reached target cost {target:.4f}")
                     break
             else:
                 iter_without_improvement += 1

@@ -145,24 +145,41 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
     Process a single TSP instance.
 
     Args:
-        args: Tuple of (instance_id, instance_type, max_iter, epsilon, early_stop).
+        args: Tuple of (instance_id, instance_type, max_iter, epsilon, allow_early_stop).
 
     Returns:
         Row data for CSV or None on failure.
     """
-    instance_id, instance_type, max_iter, epsilon, early_stop = args
+    instance_id, instance_type, max_iter, epsilon, allow_early_stop = args
 
     try:
         # Load instance
         problem = TSPInstance(f"data/{instance_type}.json", instance_id=instance_id)
 
-        # Calculate optimal cost
+        # Calculate optimal cost (primal value from MIP solver)
         opt_tour = problem.opt_tour
         if opt_tour is None:
             print(f"SKIP: {instance_type}{instance_id} - No optimal tour")
             return None
 
-        opt_cost = sum(problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
+        primal_cost = sum(
+            problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
+        )
+
+        # Calculate early_stop_target based on MIP gap
+        # - gap == 0.0: tour is provably optimal, use primal_cost
+        # - gap > 0: use lower_bound = primal / (1 + gap/100)
+        # - gap is None: no guarantee, disable early stop
+        mip_gap = problem.mip_gap
+        if not allow_early_stop:
+            early_stop_target = None  # Globally disabled
+        elif mip_gap is None:
+            early_stop_target = None  # No gap info, can't guarantee optimality
+        elif mip_gap == 0.0:
+            early_stop_target = primal_cost  # Tour is optimal
+        else:
+            # mip_gap > 0: lower_bound = primal / (1 + gap)
+            early_stop_target = primal_cost / (1 + mip_gap)
 
         # Setup Q-ILS solver
         solver = QILS(problem)
@@ -170,12 +187,15 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
         solver.load_q_table(q_table_path)
 
         # Run Q-ILS (stats are collected internally)
+        # opt_cost is always primal_cost (for gap calculation)
+        # early_stop_target controls when to stop early
         best_solution = solver.run(
             max_iter=max_iter,
-            opt_cost=opt_cost,
+            opt_cost=primal_cost,
             epsilon=epsilon,
             verbose=False,
-            early_stop=early_stop,
+            early_stop=allow_early_stop,
+            early_stop_target=early_stop_target,
         )
 
         # Get stats from solver
@@ -196,7 +216,7 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
             instance_type,
             problem.dimension,
             # Solution quality
-            opt_cost,
+            primal_cost,
             best_solution.cost,
             f"{stats.final_gap:.4f}%",
             # Timing (ms)

@@ -169,15 +169,17 @@ def main() -> None:
             # Record training stats
             iterations_used = len(history.get("avg_q_value", []))
             final_avg_q = history["avg_q_value"][-1] if history.get("avg_q_value") else 0.0
-            training_log.append({
-                "type": instance_type,
-                "size": n_cities,
-                "n_files": len(paths),
-                "iterations": iterations_used,
-                "time_ms": train_time_ms,
-                "final_avg_q": final_avg_q,
-                "gamma": args.gamma,
-            })
+            training_log.append(
+                {
+                    "type": instance_type,
+                    "size": n_cities,
+                    "n_files": len(paths),
+                    "iterations": iterations_used,
+                    "time_ms": train_time_ms,
+                    "final_avg_q": final_avg_q,
+                    "gamma": args.gamma,
+                }
+            )
 
             # Save Q-table
             q_table.to_txt(f"{q_tables_dir}/instance_size_{n_cities:02d}.txt")

@@ -168,6 +168,12 @@ class TSPInstance:
         else:
             self.opt_tour = None
 
+        # Load MIP gap (duality gap from solver)
+        # gap=0 means tour is provably optimal
+        # gap>0 means solver didn't close gap (lower_bound = primal / (1 + gap/100))
+        # gap=None means no gap info available
+        self.mip_gap: Optional[float] = entry.get("gap")
+
     def get_nodes(self) -> range:
         """Node indices {1, ..., n}."""
         return range(1, self.n + 1)
