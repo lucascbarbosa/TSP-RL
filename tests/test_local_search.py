@@ -4,7 +4,14 @@ import numpy as np
 import pytest
 
 from src.tsp.solution import Solution
-from src.tsp.local_search import two_opt, lin_kernighan, _two_opt_delta, _two_opt_gain
+from src.tsp.local_search import (
+    two_opt,
+    two_opt_nn,
+    two_opt_dlb,
+    lin_kernighan,
+    _two_opt_delta,
+    _two_opt_gain,
+)
 
 
 class TestTwoOptDelta:
@@ -97,3 +104,53 @@ class TestLinKernighan:
         assert improved._cost is not None
         actual = Solution.compute_cost_static(improved.tour, simple_dist_matrix, is_closed=True)
         assert improved.cost == pytest.approx(actual, rel=1e-6)
+
+
+class TestTwoOptNN:
+    """Tests for 2-opt with neighbor lists."""
+
+    def test_improves_suboptimal(self, simple_dist_matrix, suboptimal_tour):
+        """2-opt-nn should improve a suboptimal tour."""
+        sol = Solution(suboptimal_tour, simple_dist_matrix)
+        improved = two_opt_nn(sol, k=3)
+        assert improved.cost <= sol.cost
+
+    def test_quality_close_to_full_two_opt(self, larger_dist_matrix):
+        """2-opt-nn should find solution close to full 2-opt (within 10%)."""
+        np.random.seed(456)
+        n = larger_dist_matrix.shape[0]
+        random_tour = list(range(1, n + 1))
+        np.random.shuffle(random_tour)
+        random_tour.append(random_tour[0])
+
+        sol = Solution(random_tour, larger_dist_matrix)
+        two_opt_result = two_opt(sol)
+        nn_result = two_opt_nn(sol, k=5)
+
+        # Should be within 10% of full 2-opt
+        assert nn_result.cost <= two_opt_result.cost * 1.10
+
+
+class TestTwoOptDLB:
+    """Tests for 2-opt with neighbor lists + don't look bits."""
+
+    def test_improves_suboptimal(self, simple_dist_matrix, suboptimal_tour):
+        """2-opt-dlb should improve a suboptimal tour."""
+        sol = Solution(suboptimal_tour, simple_dist_matrix)
+        improved = two_opt_dlb(sol, k=3)
+        assert improved.cost <= sol.cost
+
+    def test_quality_reasonable(self, larger_dist_matrix):
+        """2-opt-dlb should find a reasonable solution (within 15% of 2-opt)."""
+        np.random.seed(789)
+        n = larger_dist_matrix.shape[0]
+        random_tour = list(range(1, n + 1))
+        np.random.shuffle(random_tour)
+        random_tour.append(random_tour[0])
+
+        sol = Solution(random_tour, larger_dist_matrix)
+        two_opt_result = two_opt(sol)
+        dlb_result = two_opt_dlb(sol, k=5)
+
+        # Should be within 15% of full 2-opt
+        assert dlb_result.cost <= two_opt_result.cost * 1.15

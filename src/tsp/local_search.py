@@ -10,6 +10,195 @@ from numpy.typing import NDArray
 from src.tsp.solution import Solution
 
 
+# =============================================================================
+# Neighbor Lists (for large instances)
+# =============================================================================
+
+
+def _build_neighbor_lists(
+    dist_matrix: NDArray[np.float64],
+    k: int,
+) -> NDArray[np.int32]:
+    """
+    Build k-nearest neighbor lists for each city.
+
+    Args:
+        dist_matrix: Distance matrix (n x n), 0-based indexing.
+        k: Number of nearest neighbors to keep.
+
+    Returns:
+        Array of shape (n, k) where neighbors[i] contains indices of
+        k nearest neighbors of city i, sorted by distance.
+    """
+    n = dist_matrix.shape[0]
+    k = min(k, n - 1)  # can't have more neighbors than n-1
+
+    # For each city, get indices sorted by distance (excluding self)
+    # argsort gives indices; we skip index 0 (self, distance=0) and take next k
+    neighbors = np.zeros((n, k), dtype=np.int32)
+
+    for i in range(n):
+        # Sort by distance, exclude self
+        sorted_indices = np.argsort(dist_matrix[i])
+        # Skip self (first element after sort, which has distance 0)
+        neighbor_indices = sorted_indices[sorted_indices != i][:k]
+        neighbors[i, : len(neighbor_indices)] = neighbor_indices
+
+    return neighbors
+
+
+def two_opt_nn(solution: Solution, k: int = 20) -> Solution:
+    """
+    2-opt with neighbor lists for O(n·k) complexity per pass.
+
+    Only considers moves where the new edge (a,c) connects city a to one of
+    its k nearest neighbors. This dramatically speeds up large instances
+    while typically finding solutions within 1% of full 2-opt.
+
+    Args:
+        solution: Input solution (closed tour).
+        k: Number of nearest neighbors to consider (default 20).
+
+    Returns:
+        Improved solution.
+    """
+    tour = solution.tour[:]
+    cost = solution.cost
+    dist_matrix = solution.dist_matrix
+    n = len(tour) - 1
+
+    # Build neighbor lists (0-based city indices)
+    neighbors = _build_neighbor_lists(dist_matrix, k)
+
+    # Position array: pos[city] = position in tour (1-based city to 0-based position)
+    # tour uses 1-based cities, so pos[city-1] = position
+    pos = np.zeros(n, dtype=np.int32)
+    for idx in range(n):
+        pos[tour[idx] - 1] = idx
+
+    improved = True
+    while improved:
+        improved = False
+        best_delta = 0.0
+        best_i, best_j = -1, -1
+
+        # For each position i (where segment starts)
+        for i in range(1, n - 1):
+            a = tour[i - 1] - 1  # city before segment (0-based)
+
+            # Check only k nearest neighbors of a as potential new connection
+            for c in neighbors[a]:
+                # c is a potential new neighbor of a after the 2-opt move
+                # In 2-opt reversing [i:j], new edge is (a, c) where c = tour[j-1]
+                # So we need j-1 position where tour[j-1]-1 == c
+                j_minus_1 = pos[c]  # position of city c+1 (1-based)
+                j = j_minus_1 + 1
+
+                # Validate: j must be > i+1 and < n (valid segment)
+                if j <= i + 1 or j >= n:
+                    continue
+
+                delta = _two_opt_delta(tour, i, j, dist_matrix)
+                if delta < best_delta - 1e-10:
+                    best_delta = delta
+                    best_i, best_j = i, j
+
+        # Apply best move if found
+        if best_delta < -1e-10:
+            # Update tour
+            tour[best_i:best_j] = reversed(tour[best_i:best_j])
+            cost += best_delta
+            improved = True
+
+            # Update position array for affected cities
+            for idx in range(best_i, best_j):
+                pos[tour[idx] - 1] = idx
+
+    return Solution(tour, dist_matrix, is_closed=True, cost=cost)
+
+
+def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
+    """
+    2-opt with Neighbor Lists + Don't Look Bits for maximum speed.
+
+    DLB skips cities that haven't led to improvements recently, reducing
+    redundant checks. Combined with neighbor lists, achieves near-optimal
+    results with sub-quadratic runtime.
+
+    Args:
+        solution: Input solution (closed tour).
+        k: Number of nearest neighbors to consider (default 20).
+
+    Returns:
+        Improved solution.
+    """
+    tour = solution.tour[:]
+    cost = solution.cost
+    dist_matrix = solution.dist_matrix
+    n = len(tour) - 1
+
+    # Build neighbor lists
+    neighbors = _build_neighbor_lists(dist_matrix, k)
+
+    # Position array
+    pos = np.zeros(n, dtype=np.int32)
+    for idx in range(n):
+        pos[tour[idx] - 1] = idx
+
+    # Don't Look Bits: dlb[city] = True means skip this city
+    dlb = np.zeros(n, dtype=bool)
+
+    improved = True
+    while improved:
+        improved = False
+
+        for i in range(1, n - 1):
+            city_at_i = tour[i] - 1  # 0-based city index
+
+            # Skip if this city is marked as "don't look"
+            if dlb[city_at_i]:
+                continue
+
+            a = tour[i - 1] - 1  # city before position i
+
+            found_improvement = False
+            best_delta = 0.0
+            best_j = -1
+
+            # Check neighbors of city a
+            for c in neighbors[a]:
+                j_minus_1 = pos[c]
+                j = j_minus_1 + 1
+
+                if j <= i + 1 or j >= n:
+                    continue
+
+                delta = _two_opt_delta(tour, i, j, dist_matrix)
+                if delta < best_delta - 1e-10:
+                    best_delta = delta
+                    best_j = j
+                    found_improvement = True
+
+            if found_improvement:
+                # Apply move
+                tour[i:best_j] = reversed(tour[i:best_j])
+                cost += best_delta
+                improved = True
+
+                # Update position array
+                for idx in range(i, best_j):
+                    pos[tour[idx] - 1] = idx
+
+                # Clear DLB for affected cities (they may now have good moves)
+                for idx in range(max(0, i - 1), min(n, best_j + 1)):
+                    dlb[tour[idx] - 1] = False
+            else:
+                # No improvement found for this city, mark as "don't look"
+                dlb[city_at_i] = True
+
+    return Solution(tour, dist_matrix, is_closed=True, cost=cost)
+
+
 def _two_opt_delta(
     tour: list[int],
     i: int,
@@ -210,5 +399,7 @@ def _apply_two_opt(tour: list[int], i: int, j: int) -> list[int]:
 # Registry: local search name -> function
 LOCAL_SEARCHES: dict[str, Callable[[Solution], Solution]] = {
     "two_opt": two_opt,
+    "two_opt_nn": two_opt_nn,
+    "two_opt_dlb": two_opt_dlb,
     "lin_kernighan": lin_kernighan,
 }
