@@ -10,12 +10,47 @@ from numpy.typing import NDArray
 from src.tsp.solution import Solution
 
 
+def _two_opt_delta(
+    tour: List[int],
+    i: int,
+    j: int,
+    dist_matrix: NDArray[np.float64],
+) -> float:
+    """
+    Calculate cost change (delta) from a 2-opt move in O(1).
+
+    A 2-opt move reverses the segment tour[i:j], which replaces edges
+    (i-1, i) and (j-1, j) with edges (i-1, j-1) and (i, j).
+
+    Args:
+        tour: Closed tour [c0, ..., cn-1, c0] with 1-based city indices.
+        i: Start of segment to reverse (1 <= i < j).
+        j: End of segment to reverse (i < j <= n-1).
+        dist_matrix: Distance matrix (0-based indexing).
+
+    Returns:
+        Cost delta (negative means improvement).
+    """
+    # Cities involved (convert to 0-based for matrix access)
+    a = tour[i - 1] - 1  # before segment
+    b = tour[i] - 1  # start of segment
+    c = tour[j - 1] - 1  # end of segment
+    d = tour[j] - 1  # after segment
+
+    # Edges removed: (a, b) and (c, d)
+    # Edges added: (a, c) and (b, d)
+    removed = dist_matrix[a, b] + dist_matrix[c, d]
+    added = dist_matrix[a, c] + dist_matrix[b, d]
+
+    return added - removed
+
+
 def two_opt(solution: Solution) -> Solution:
     """
     Apply 2-opt local search to improve the solution.
 
-    Uses best-improvement strategy with multiple passes until no
-    improvement is found.
+    Uses best-improvement strategy with incremental delta calculation.
+    Complexity: O(n²) per pass instead of O(n³).
 
     Args:
         solution: Input solution (closed tour).
@@ -23,33 +58,33 @@ def two_opt(solution: Solution) -> Solution:
     Returns:
         Improved solution.
     """
-    best_tour = solution.tour[:]
-    best_cost = solution.cost
+    tour = solution.tour[:]
+    cost = solution.cost
     dist_matrix = solution.dist_matrix
 
-    n = len(best_tour) - 1  # number of actual cities
+    n = len(tour) - 1  # number of actual cities
 
     improved = True
     while improved:
         improved = False
-        # Fix first node to avoid equivalent rotations
+        best_delta = 0.0
+        best_i, best_j = -1, -1
+
+        # Find best improving move
         for i in range(1, n - 1):
-            for j in range(i + 1, n):
-                if j - i == 1:
-                    continue  # skip adjacent edges
+            for j in range(i + 2, n):  # j > i+1 to skip adjacent
+                delta = _two_opt_delta(tour, i, j, dist_matrix)
+                if delta < best_delta - 1e-10:
+                    best_delta = delta
+                    best_i, best_j = i, j
 
-                new_tour = best_tour[:]
-                # 2-opt: reverse segment [i, j)
-                new_tour[i:j] = reversed(best_tour[i:j])
+        # Apply best move if improvement found
+        if best_delta < -1e-10:
+            tour[best_i:best_j] = reversed(tour[best_i:best_j])
+            cost += best_delta
+            improved = True
 
-                new_cost = Solution.compute_cost_static(new_tour, dist_matrix, is_closed=True)
-
-                if new_cost < best_cost:
-                    best_tour = new_tour
-                    best_cost = new_cost
-                    improved = True
-
-    return Solution(best_tour, dist_matrix, is_closed=True)
+    return Solution(tour, dist_matrix, is_closed=True, cost=cost)
 
 
 def lin_kernighan(solution: Solution, max_depth: int = 2) -> Solution:
@@ -98,10 +133,10 @@ def lin_kernighan(solution: Solution, max_depth: int = 2) -> Solution:
         # Apply best chain found
         if best_global_gain > 1e-12:
             current_tour = best_global_tour
-            current_cost = Solution.compute_cost_static(current_tour, dist_matrix, is_closed=True)
+            current_cost -= best_global_gain  # Update cost incrementally
             improved = True
 
-    return Solution(current_tour, dist_matrix, is_closed=True)
+    return Solution(current_tour, dist_matrix, is_closed=True, cost=current_cost)
 
 
 def _lk_variable_depth(
@@ -194,16 +229,8 @@ def _two_opt_gain(
     """
     if i > j:
         i, j = j, i
-
-    a, b = tour[i - 1], tour[i]
-    c, d = tour[j - 1], tour[j]
-
-    a_, b_, c_, d_ = a - 1, b - 1, c - 1, d - 1
-
-    removed = dist_matrix[a_, b_] + dist_matrix[c_, d_]
-    added = dist_matrix[a_, c_] + dist_matrix[b_, d_]
-
-    return removed - added
+    # Gain is negative of delta (delta < 0 means improvement)
+    return -_two_opt_delta(tour, i, j, dist_matrix)
 
 
 def _apply_two_opt(tour: List[int], i: int, j: int) -> List[int]:

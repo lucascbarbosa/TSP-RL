@@ -95,14 +95,9 @@ class QILS:
         Args:
             problem: TSP instance to solve.
         """
-        n = problem.dimension
-        dist_matrix: NDArray[np.float64] = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                dist_matrix[i][j] = problem.get_weight(i + 1, j + 1)
-
         self.problem = problem
-        self.dist_matrix = dist_matrix
+        # Reuse precomputed distance matrix from instance (already 0-based)
+        self.dist_matrix = problem.dist_matrix
 
         self.n_states = N_STATES
         self.n_actions = N_ACTIONS
