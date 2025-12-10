@@ -47,7 +47,7 @@ def _build_neighbor_lists(
     return neighbors
 
 
-def two_opt_nn(solution: Solution, k: int = 20) -> Solution:
+def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
     """
     2-opt with neighbor lists for O(n·k) complexity per pass.
 
@@ -57,7 +57,8 @@ def two_opt_nn(solution: Solution, k: int = 20) -> Solution:
 
     Args:
         solution: Input solution (closed tour).
-        k: Number of nearest neighbors to consider (default 20).
+        k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
+           interpreted as proportion of n (default 0.5 = 50% of cities).
 
     Returns:
         Improved solution.
@@ -67,8 +68,11 @@ def two_opt_nn(solution: Solution, k: int = 20) -> Solution:
     dist_matrix = solution.dist_matrix
     n = len(tour) - 1
 
+    # Resolve k: int as-is, float as proportion
+    k_resolved = _resolve_k(k, n)
+
     # Build neighbor lists (0-based city indices)
-    neighbors = _build_neighbor_lists(dist_matrix, k)
+    neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
 
     # Position array: pos[city] = position in tour (1-based city to 0-based position)
     # tour uses 1-based cities, so pos[city-1] = position
@@ -117,7 +121,7 @@ def two_opt_nn(solution: Solution, k: int = 20) -> Solution:
     return Solution(tour, dist_matrix, is_closed=True, cost=cost)
 
 
-def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
+def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
     """
     2-opt with Neighbor Lists + Don't Look Bits for maximum speed.
 
@@ -127,7 +131,8 @@ def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
 
     Args:
         solution: Input solution (closed tour).
-        k: Number of nearest neighbors to consider (default 20).
+        k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
+           interpreted as proportion of n (default 0.5 = 50% of cities).
 
     Returns:
         Improved solution.
@@ -137,8 +142,11 @@ def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
     dist_matrix = solution.dist_matrix
     n = len(tour) - 1
 
+    # Resolve k: int as-is, float as proportion
+    k_resolved = _resolve_k(k, n)
+
     # Build neighbor lists
-    neighbors = _build_neighbor_lists(dist_matrix, k)
+    neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
 
     # Position array
     pos = np.zeros(n, dtype=np.int32)
@@ -204,22 +212,30 @@ def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
 # =============================================================================
 
 # Thresholds for adaptive selection (based on benchmarks)
-_THRESHOLD_NN = 50  # Use neighbor lists above this size
-_THRESHOLD_DLB = 80  # Use DLB above this size
+_THRESHOLD_NN = 40  # Use neighbor lists above this size
+_THRESHOLD_DLB = 80  # Use DLB at or above this size
 
 
-def two_opt_adaptive(solution: Solution, k: int = 20) -> Solution:
+def _resolve_k(k: int | float, n: int) -> int:
+    """Resolve k parameter: int as-is, float (0,1) as proportion of n."""
+    if isinstance(k, float) and 0 < k < 1:
+        return max(1, int(k * n))
+    return int(k)
+
+
+def two_opt_adaptive(solution: Solution, k: int | float = 0.5) -> Solution:
     """
     Adaptive 2-opt that selects the best variant based on instance size.
 
     Selection rules (based on empirical benchmarks):
-    - n < 50:  two_opt (full O(n²), overhead of neighbor lists not worth it)
-    - 50 ≤ n ≤ 80: two_opt_nn (neighbor lists, good quality/speed balance)
-    - n > 80: two_opt_dlb (DLB + neighbor lists, max speed, ~1-4% quality loss)
+    - n < 40:  two_opt_full (full O(n²), overhead of neighbor lists not worth it)
+    - 40 ≤ n < 80: two_opt_nn (neighbor lists, good quality/speed balance)
+    - n ≥ 80: two_opt_dlb (DLB + neighbor lists, max speed, ~1-4% quality loss)
 
     Args:
         solution: Input solution (closed tour).
-        k: Number of nearest neighbors for nn/dlb variants (default 20).
+        k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
+           interpreted as proportion of n (default 0.5 = 50% of cities).
 
     Returns:
         Improved solution.
@@ -228,7 +244,7 @@ def two_opt_adaptive(solution: Solution, k: int = 20) -> Solution:
 
     if n < _THRESHOLD_NN:
         return two_opt_full(solution)
-    elif n <= _THRESHOLD_DLB:
+    elif n < _THRESHOLD_DLB:
         return two_opt_nn(solution, k=k)
     else:
         return two_opt_dlb(solution, k=k)

@@ -175,13 +175,15 @@ O `two_opt` no registry usa seleção adaptativa que escolhe automaticamente a m
 
 | Tamanho (n) | Variante interna | Complexidade | Motivo |
 |-------------|------------------|--------------|--------|
-| n < 50      | `two_opt_full`   | O(n²)        | Overhead de neighbor lists não compensa |
-| 50 ≤ n ≤ 80 | `two_opt_nn`     | O(n·k)       | Bom equilíbrio qualidade/velocidade |
-| n > 80      | `two_opt_dlb`    | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
+| n < 40      | `two_opt_full`   | O(n²)        | Overhead de neighbor lists não compensa |
+| 40 ≤ n < 80 | `two_opt_nn`     | O(n·k)       | Bom equilíbrio qualidade/velocidade |
+| n ≥ 80      | `two_opt_dlb`    | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
 
-Speedups observados em relação ao 2-opt completo:
-- n=100: ~2.6x (nn), ~48x (dlb)
-- n=300: ~8x (nn), ~360x (dlb)
+O parâmetro `k` (número de vizinhos) aceita:
+- **int**: usado diretamente (ex: `k=20` = 20 vizinhos)
+- **float em (0,1)**: interpretado como proporção de n (ex: `k=0.5` = 50% das cidades)
+
+Padrão: `k=0.5` (50% das cidades como vizinhos).
 
 As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão disponíveis via import direto se necessário.
 
