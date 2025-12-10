@@ -1,6 +1,6 @@
 # Python
-*.py[cod]
-__pycache__/
+**/*.py[cod]
+**/__pycache__/
 *.so
 .Python
 *.egg-info/
@@ -15,6 +15,8 @@ build/
 secrets.secrets
 data/tsplib
 data/train
+**/old/
+*.png
 
 # LaTeX
 *.aux
