@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -87,7 +87,7 @@ def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
 
 
 # Registry: edge_weight_type -> distance function
-DISTANCE_METRICS: Dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]] = {
+DISTANCE_METRICS: dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]] = {
     "EUC_2D": _euc_2d,
     "ATT": _att,
     "GEO": _geo,
@@ -123,7 +123,7 @@ class TSPInstance:
         path: Union[str, Path],
         instance_id: int = 0,
         num_cities: Optional[int] = None,
-        preloaded_data: Optional[List[Dict[str, Any]]] = None,
+        preloaded_data: Optional[list[dict[str, Any]]] = None,
         edge_weight_type: Optional[str] = None,
     ) -> None:
         """
@@ -164,7 +164,7 @@ class TSPInstance:
         # Load optimal tour if available
         if "tour" in entry and entry["tour"] is not None:
             full_tour = [c + 1 for c in entry["tour"]]
-            self.opt_tour: Optional[List[int]] = [c for c in full_tour if c <= self.n]
+            self.opt_tour: Optional[list[int]] = [c for c in full_tour if c <= self.n]
         else:
             self.opt_tour = None
 
@@ -196,7 +196,7 @@ class TSPDataset:
     def __init__(
         self,
         json_file_path: Union[str, Path],
-        active_indices: List[int],
+        active_indices: list[int],
         edge_weight_type: Optional[str] = None,
     ) -> None:
         """

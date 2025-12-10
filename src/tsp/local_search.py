@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Set, Tuple
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,7 +11,7 @@ from src.tsp.solution import Solution
 
 
 def _two_opt_delta(
-    tour: List[int],
+    tour: list[int],
     i: int,
     j: int,
     dist_matrix: NDArray[np.float64],
@@ -131,11 +131,11 @@ def lin_kernighan(solution: Solution, max_depth: int = 2) -> Solution:
 
 
 def _lk_chain(
-    tour: List[int],
+    tour: list[int],
     start_pos: int,
     max_depth: int,
     dist: NDArray[np.float64],
-) -> Tuple[List[int], float]:
+) -> tuple[list[int], float]:
     """
     Explore LK chain from a starting position using iterative approach.
 
@@ -184,7 +184,7 @@ def _lk_chain(
 
 
 def _two_opt_gain(
-    tour: List[int],
+    tour: list[int],
     i: int,
     j: int,
     dist_matrix: NDArray[np.float64],
@@ -208,7 +208,7 @@ def _two_opt_gain(
     return -_two_opt_delta(tour, i, j, dist_matrix)
 
 
-def _apply_two_opt(tour: List[int], i: int, j: int) -> List[int]:
+def _apply_two_opt(tour: list[int], i: int, j: int) -> list[int]:
     """
     Apply 2-opt move to tour.
 
@@ -233,7 +233,7 @@ def _apply_two_opt(tour: List[int], i: int, j: int) -> List[int]:
 
 
 # Registry: local search name -> function
-LOCAL_SEARCHES: Dict[str, Callable[[Solution], Solution]] = {
+LOCAL_SEARCHES: dict[str, Callable[[Solution], Solution]] = {
     "two_opt": two_opt,
     "lin_kernighan": lin_kernighan,
 }

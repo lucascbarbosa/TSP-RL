@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 
 import torch
 
@@ -87,7 +87,7 @@ def build_mdp_from_folder(
 
 
 def build_mdp_from_paths(
-    paths: List[Union[str, Path]],
+    paths: list[Union[str, Path]],
     min_n_states: int = 0,
     min_n_actions: int = 0,
 ) -> MDP:

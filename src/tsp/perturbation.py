@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Dict
+from typing import Callable
 
 from src.tsp.solution import Solution
 
@@ -63,7 +63,7 @@ def segment_reverse(solution: Solution) -> Solution:
 
 
 # Registry: perturbation name -> function
-PERTURBATIONS: Dict[str, Callable[[Solution], Solution]] = {
+PERTURBATIONS: dict[str, Callable[[Solution], Solution]] = {
     "two_swap": two_swap,
     "segment_reverse": segment_reverse,
 }

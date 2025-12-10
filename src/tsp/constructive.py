@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Dict, List, Tuple
+from typing import Callable
 
 from src.tsp.instance import TSPInstance
 
 
-def random_tour(problem: TSPInstance) -> Tuple[List[int], float]:
+def random_tour(problem: TSPInstance) -> tuple[list[int], float]:
     """
     Generate a random tour.
 
@@ -39,7 +39,7 @@ def random_tour(problem: TSPInstance) -> Tuple[List[int], float]:
 def nearest_neighbor(
     problem: TSPInstance,
     start_node: int | None = None,
-) -> Tuple[List[int], float]:
+) -> tuple[list[int], float]:
     """
     Generate tour using nearest neighbor heuristic.
 
@@ -78,7 +78,7 @@ def nearest_neighbor(
 def cheapest_insertion(
     problem: TSPInstance,
     start_node: int | None = None,
-) -> Tuple[List[int], float]:
+) -> tuple[list[int], float]:
     """
     Generate tour using cheapest insertion heuristic.
 
@@ -141,7 +141,7 @@ def cheapest_insertion(
 
 
 # Registry: constructive heuristic name -> function
-CONSTRUCTIVES: Dict[str, Callable[[TSPInstance], Tuple[List[int], float]]] = {
+CONSTRUCTIVES: dict[str, Callable[[TSPInstance], tuple[list[int], float]]] = {
     "random": random_tour,
     "nearest": nearest_neighbor,
     "cheapest": cheapest_insertion,

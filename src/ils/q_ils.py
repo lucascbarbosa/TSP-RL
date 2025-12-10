@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from enum import IntEnum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,7 +33,7 @@ class State(IntEnum):
 
 
 # State rewards mapping
-STATE_REWARDS: Dict[State, int] = {
+STATE_REWARDS: dict[State, int] = {
     State.EXCELLENT: 75,
     State.GOOD: 50,
     State.REGULAR: 25,
@@ -61,7 +61,7 @@ class Action(IntEnum):
 
 
 # Action to (perturbation, local_search) mapping
-ACTION_DECODE: Dict[Action, Tuple[str, str]] = {
+ACTION_DECODE: dict[Action, tuple[str, str]] = {
     Action.TWO_SWAP_2OPT: ("two_swap", "two_opt"),
     Action.TWO_SWAP_LK: ("two_swap", "lin_kernighan"),
     Action.SEGMENT_REVERSE_2OPT: ("segment_reverse", "two_opt"),
@@ -73,7 +73,7 @@ ACTION_DECODE: Dict[Action, Tuple[str, str]] = {
 }
 
 # Reverse mapping
-ACTION_ENCODE: Dict[Tuple[str, str], Action] = {v: k for k, v in ACTION_DECODE.items()}
+ACTION_ENCODE: dict[tuple[str, str], Action] = {v: k for k, v in ACTION_DECODE.items()}
 
 N_STATES = len(State)
 N_ACTIONS = len(Action)
@@ -115,7 +115,7 @@ class QILS:
         """
         self.q_table = QTable.from_txt(path)
 
-    def get_state(self, cost: float, opt_cost: float) -> Tuple[State, int]:
+    def get_state(self, cost: float, opt_cost: float) -> tuple[State, int]:
         """
         Map current cost to discrete state based on gap percentage.
 
@@ -242,7 +242,7 @@ class QILS:
         best_solution = ls_solution.copy()
 
         iter_without_improvement = 0
-        output_lines: List[str] = []
+        output_lines: list[str] = []
 
         action_list = list(ACTION_DECODE.keys())
 

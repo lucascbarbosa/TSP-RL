@@ -24,7 +24,7 @@ import re
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 
 from src.tsp.instance import TSPInstance
 from src.ils.q_ils import QILS
@@ -38,7 +38,7 @@ except ImportError:
     HAS_PLOTTING = False
 
 
-def get_available_sizes(instance_type: str) -> Set[int]:
+def get_available_sizes(instance_type: str) -> set[int]:
     """
     Detect available Q-table sizes for a given instance type.
 
@@ -52,7 +52,7 @@ def get_available_sizes(instance_type: str) -> Set[int]:
     if not q_tables_dir.exists():
         return set()
 
-    sizes: Set[int] = set()
+    sizes: set[int] = set()
     for f in q_tables_dir.glob("instance_size_*.txt"):
         match = re.search(r"instance_size_(\d+)\.txt", f.name)
         if match:
@@ -60,7 +60,7 @@ def get_available_sizes(instance_type: str) -> Set[int]:
     return sizes
 
 
-def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[int, int]:
+def get_instance_dimensions(dataset_path: str, instance_ids: list[int]) -> dict[int, int]:
     """
     Get dimensions for specific instances from dataset.
 
@@ -74,7 +74,7 @@ def get_instance_dimensions(dataset_path: str, instance_ids: List[int]) -> Dict[
     with open(dataset_path, "r") as f:
         data = json.load(f)
 
-    dimensions: Dict[int, int] = {}
+    dimensions: dict[int, int] = {}
     for idx in instance_ids:
         if 0 <= idx < len(data):
             dimensions[idx] = len(data[idx]["coords"])
@@ -92,9 +92,9 @@ def get_default_workers() -> int:
     return max(1, os.cpu_count() - 2)
 
 
-def get_processed_instances(filename: str) -> Set[str]:
+def get_processed_instances(filename: str) -> set[str]:
     """Load already processed instance IDs from results file."""
-    processed: Set[str] = set()
+    processed: set[str] = set()
     if os.path.exists(filename):
         with open(filename, mode="r", newline="") as file:
             reader = csv.reader(file)
@@ -117,7 +117,7 @@ def initialize_csv(filename: str) -> None:
             )
 
 
-def process_instance(args: Tuple[int, str, int, float]) -> Optional[List]:
+def process_instance(args: tuple[int, str, int, float]) -> Optional[list]:
     """
     Process a single TSP instance.
 
@@ -241,7 +241,7 @@ def main() -> None:
         splits = json.load(f)
 
     # Build job list (instance_id, instance_type, max_iter, epsilon)
-    jobs: List[Tuple[int, str, int, float]] = []
+    jobs: list[tuple[int, str, int, float]] = []
 
     for instance_type in args.types:
         key = f"data/{instance_type}.json"

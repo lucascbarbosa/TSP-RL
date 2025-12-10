@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -23,7 +23,7 @@ class Solution:
 
     def __init__(
         self,
-        tour: List[int],
+        tour: list[int],
         dist_matrix: NDArray[np.float64],
         is_closed: bool = True,
         cost: Optional[float] = None,
@@ -50,7 +50,7 @@ class Solution:
 
     @staticmethod
     def compute_cost_static(
-        tour: List[int],
+        tour: list[int],
         dist_matrix: NDArray[np.float64],
         is_closed: bool = True,
     ) -> float:

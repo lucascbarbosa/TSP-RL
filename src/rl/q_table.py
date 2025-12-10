@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -149,7 +149,7 @@ class QTable:
         n_simulations: int,
         initial_state: int,
         max_steps: int = 1000,
-    ) -> Dict[str, List[float]]:
+    ) -> dict[str, list[float]]:
         """
         Run rollout simulations using the learned policy.
 
@@ -162,7 +162,7 @@ class QTable:
         Returns:
             Dictionary with 'rewards' and 'length' lists.
         """
-        history: Dict[str, List[float]] = {"rewards": [], "length": []}
+        history: dict[str, list[float]] = {"rewards": [], "length": []}
         mdp = build_mdp_from_file(transition_filename)
         P = mdp.transition_matrix
         R = mdp.reward_matrix

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Union
 
 import torch
 
@@ -19,7 +19,7 @@ def train_q_table(
     max_iter: int = 1000,
     tol: float = 1e-6,
     q_table: QTable | None = None,
-) -> Tuple[QTable, Dict[str, List[float]]]:
+) -> tuple[QTable, dict[str, list[float]]]:
     """
     Train Q-table from transition file using value iteration.
 
@@ -43,7 +43,7 @@ def train_q_table_from_folder(
     max_iter: int = 1000,
     tol: float = 1e-6,
     q_table: QTable | None = None,
-) -> Tuple[QTable, Dict[str, List[float]]]:
+) -> tuple[QTable, dict[str, list[float]]]:
     """
     Train Q-table from all transition files in a folder.
 
@@ -62,14 +62,14 @@ def train_q_table_from_folder(
 
 
 def train_q_table_from_paths(
-    paths: List[Union[str, Path]],
+    paths: list[Union[str, Path]],
     gamma: float = 0.99,
     max_iter: int = 1000,
     tol: float = 1e-6,
     q_table: QTable | None = None,
     min_n_states: int = 0,
     min_n_actions: int = 0,
-) -> Tuple[QTable, Dict[str, List[float]]]:
+) -> tuple[QTable, dict[str, list[float]]]:
     """
     Train Q-table from specific transition file paths.
 
@@ -95,7 +95,7 @@ def train_q_table_from_mdp(
     max_iter: int = 1000,
     tol: float = 1e-6,
     q_table: QTable | None = None,
-) -> Tuple[QTable, Dict[str, List[float]]]:
+) -> tuple[QTable, dict[str, list[float]]]:
     """
     Train Q-table from MDP using vectorized value iteration.
 
@@ -118,7 +118,7 @@ def train_q_table_from_mdp(
     P = mdp.transition_matrix  # (n_states, n_actions, n_states)
     R = mdp.reward_matrix  # (n_states, n_actions)
 
-    history: Dict[str, List[float]] = {"avg_q_value": []}
+    history: dict[str, list[float]] = {"avg_q_value": []}
 
     if q_table is None:
         q_current = QTable(n_states=n_states, n_actions=n_actions)

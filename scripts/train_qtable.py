@@ -20,7 +20,6 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import List, Tuple
 
 from tqdm import tqdm
 
@@ -38,8 +37,8 @@ except ImportError:
 
 def get_transition_files(
     transitions_dir: Path,
-    train_ids: List[int],
-) -> List[Tuple[int, str, int]]:
+    train_ids: list[int],
+) -> list[tuple[int, str, int]]:
     """
     Get list of transition files matching training instances.
 
@@ -51,7 +50,7 @@ def get_transition_files(
         List of (instance_num, file_path, n_nodes) tuples.
     """
     all_files = sorted(transitions_dir.glob("*.txt"))
-    train_instances: List[Tuple[int, str, int]] = []
+    train_instances: list[tuple[int, str, int]] = []
 
     for file in all_files:
         match = re.search(r"random_instance_(\d+)_nodes_(\d+)", str(file))
