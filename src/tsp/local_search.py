@@ -199,6 +199,41 @@ def two_opt_dlb(solution: Solution, k: int = 20) -> Solution:
     return Solution(tour, dist_matrix, is_closed=True, cost=cost)
 
 
+# =============================================================================
+# Adaptive 2-opt (auto-selects best variant based on instance size)
+# =============================================================================
+
+# Thresholds for adaptive selection (based on benchmarks)
+_THRESHOLD_NN = 50  # Use neighbor lists above this size
+_THRESHOLD_DLB = 80  # Use DLB above this size
+
+
+def two_opt_adaptive(solution: Solution, k: int = 20) -> Solution:
+    """
+    Adaptive 2-opt that selects the best variant based on instance size.
+
+    Selection rules (based on empirical benchmarks):
+    - n < 50:  two_opt (full O(n²), overhead of neighbor lists not worth it)
+    - 50 ≤ n ≤ 80: two_opt_nn (neighbor lists, good quality/speed balance)
+    - n > 80: two_opt_dlb (DLB + neighbor lists, max speed, ~1-4% quality loss)
+
+    Args:
+        solution: Input solution (closed tour).
+        k: Number of nearest neighbors for nn/dlb variants (default 20).
+
+    Returns:
+        Improved solution.
+    """
+    n = len(solution.tour) - 1  # exclude closing city
+
+    if n < _THRESHOLD_NN:
+        return two_opt_full(solution)
+    elif n <= _THRESHOLD_DLB:
+        return two_opt_nn(solution, k=k)
+    else:
+        return two_opt_dlb(solution, k=k)
+
+
 def _two_opt_delta(
     tour: list[int],
     i: int,
@@ -234,12 +269,12 @@ def _two_opt_delta(
     return added - removed
 
 
-def two_opt(solution: Solution) -> Solution:
+def two_opt_full(solution: Solution) -> Solution:
     """
-    Apply 2-opt local search to improve the solution.
+    Full 2-opt local search with O(n²) complexity per pass.
 
     Uses best-improvement strategy with incremental delta calculation.
-    Complexity: O(n²) per pass instead of O(n³).
+    For large instances (n > 50), consider two_opt_nn or two_opt_dlb instead.
 
     Args:
         solution: Input solution (closed tour).
@@ -396,10 +431,13 @@ def _apply_two_opt(tour: list[int], i: int, j: int) -> list[int]:
     return new_tour
 
 
+# Alias: two_opt points to adaptive by default
+two_opt = two_opt_adaptive
+
 # Registry: local search name -> function
+# "two_opt" uses adaptive selection by default (auto-selects best variant by instance size)
+# Individual variants (two_opt_full, two_opt_nn, two_opt_dlb) available via direct import
 LOCAL_SEARCHES: dict[str, Callable[[Solution], Solution]] = {
     "two_opt": two_opt,
-    "two_opt_nn": two_opt_nn,
-    "two_opt_dlb": two_opt_dlb,
     "lin_kernighan": lin_kernighan,
 }

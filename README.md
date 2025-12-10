@@ -166,8 +166,24 @@ Os operadores são funções standalone com registros `Dict[str, Callable]` para
 
 ### Buscas Locais (`LOCAL_SEARCHES`)
 
-- **two_opt**: troca 2 arestas; O(n²) por iteração
+- **two_opt**: troca 2 arestas; usa seleção adaptativa por padrão
 - **lin_kernighan**: cadeias de 2-opt com profundidade limitada (depth=2)
+
+#### Seleção Adaptativa do 2-opt
+
+O `two_opt` no registry usa seleção adaptativa que escolhe automaticamente a melhor variante baseado no tamanho da instância:
+
+| Tamanho (n) | Variante interna | Complexidade | Motivo |
+|-------------|------------------|--------------|--------|
+| n < 50      | `two_opt_full`   | O(n²)        | Overhead de neighbor lists não compensa |
+| 50 ≤ n ≤ 80 | `two_opt_nn`     | O(n·k)       | Bom equilíbrio qualidade/velocidade |
+| n > 80      | `two_opt_dlb`    | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
+
+Speedups observados em relação ao 2-opt completo:
+- n=100: ~2.6x (nn), ~48x (dlb)
+- n=300: ~8x (nn), ~360x (dlb)
+
+As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão disponíveis via import direto se necessário.
 
 ### Perturbações (`PERTURBATIONS`)
 
@@ -215,7 +231,7 @@ print(f"Estados: {N_STATES}, Ações: {N_ACTIONS}")   # 5, 8
 from src import Solution
 tour, cost = CONSTRUCTIVES["nearest"](problem)
 solution = Solution(tour, dist_matrix, is_closed=True)
-improved = LOCAL_SEARCHES["two_opt"](solution)
+improved = LOCAL_SEARCHES["two_opt"](solution)  # usa seleção adaptativa por padrão
 ```
 
 ## Split de Dados
