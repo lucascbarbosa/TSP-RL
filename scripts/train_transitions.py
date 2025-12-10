@@ -176,7 +176,9 @@ def main() -> None:
         max_iter=args.max_iter,
     )
 
-    with ProcessPoolExecutor(max_workers=num_cores) as executor:
+    # Use 'spawn' context to avoid CUDA re-initialization issues with fork
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=num_cores, mp_context=ctx) as executor:
         results = list(
             tqdm(
                 executor.map(worker_func, train_set),

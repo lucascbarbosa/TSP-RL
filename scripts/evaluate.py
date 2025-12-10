@@ -18,13 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import argparse
 import csv
 import json
+import multiprocessing
 import os
 import re
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from src.tsp.instance import TSPInstance
 from src.ils.q_ils import QILS
@@ -92,10 +92,6 @@ def get_default_workers() -> int:
     return max(1, os.cpu_count() - 2)
 
 
-# Thread-safe file writing
-csv_lock = threading.Lock()
-
-
 def get_processed_instances(filename: str) -> Set[str]:
     """Load already processed instance IDs from results file."""
     processed: Set[str] = set()
@@ -121,14 +117,17 @@ def initialize_csv(filename: str) -> None:
             )
 
 
-def process_instance(args: Tuple[int, str, str, int, float]) -> None:
+def process_instance(args: Tuple[int, str, int, float]) -> Optional[List]:
     """
     Process a single TSP instance.
 
     Args:
-        args: Tuple of (instance_id, instance_type, output_filename, max_iter, epsilon).
+        args: Tuple of (instance_id, instance_type, max_iter, epsilon).
+
+    Returns:
+        Row data for CSV or None on failure.
     """
-    instance_id, instance_type, output_filename, max_iter, epsilon = args
+    instance_id, instance_type, max_iter, epsilon = args
 
     try:
         # Load instance
@@ -138,7 +137,7 @@ def process_instance(args: Tuple[int, str, str, int, float]) -> None:
         opt_tour = problem.opt_tour
         if opt_tour is None:
             print(f"SKIP: {instance_type}{instance_id} - No optimal tour")
-            return
+            return None
 
         opt_cost = sum(problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
 
@@ -161,7 +160,9 @@ def process_instance(args: Tuple[int, str, str, int, float]) -> None:
         gap_value = ((best_solution.cost - opt_cost) / opt_cost) * 100
         full_id = f"{instance_type}{instance_id}"
 
-        row_data = [
+        print(f"DONE: {full_id} | Gap: {gap_value:.2f}% | Time: {exec_time:.2f}s")
+
+        return [
             full_id,
             problem.name,
             instance_id,
@@ -174,16 +175,9 @@ def process_instance(args: Tuple[int, str, str, int, float]) -> None:
             str(best_solution.tour),
         ]
 
-        # Thread-safe write to CSV
-        with csv_lock:
-            with open(output_filename, mode="a", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(row_data)
-
-        print(f"DONE: {full_id} | Gap: {gap_value:.2f}% | Time: {exec_time:.2f}s")
-
     except Exception as e:
         print(f"ERROR processing {instance_type}-{instance_id}: {e}")
+        return None
 
 
 def main() -> None:
@@ -211,7 +205,7 @@ def main() -> None:
         "--workers",
         type=int,
         default=None,
-        help="Number of worker threads (default: cpu_count - 2)",
+        help="Number of worker processes (default: cpu_count - 2)",
     )
     parser.add_argument(
         "--max_iter",
@@ -246,8 +240,8 @@ def main() -> None:
     with open(args.splits, "r") as f:
         splits = json.load(f)
 
-    # Build job list
-    jobs: List[Tuple[int, str, str, int, float]] = []
+    # Build job list (instance_id, instance_type, max_iter, epsilon)
+    jobs: List[Tuple[int, str, int, float]] = []
 
     for instance_type in args.types:
         key = f"data/{instance_type}.json"
@@ -284,20 +278,28 @@ def main() -> None:
                 filtered_count += 1
                 continue
 
-            jobs.append((instance_id, instance_type, args.output, args.max_iter, args.epsilon))
+            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon))
 
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
 
     # Resolve workers: use cli arg or default to cpu_count - 2
     num_workers = args.workers if args.workers is not None else get_default_workers()
-    print(f"Starting evaluation of {len(jobs)} instances with {num_workers} threads...")
+    print(f"Starting evaluation of {len(jobs)} instances with {num_workers} processes...")
 
-    # Run parallel evaluation
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        executor.map(process_instance, jobs)
+    # Run parallel evaluation and collect results
+    # Use 'spawn' context to avoid CUDA re-initialization issues with fork
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=num_workers, mp_context=ctx) as executor:
+        results = list(executor.map(process_instance, jobs))
 
-    print("Evaluation complete.")
+    # Write results to CSV
+    valid_results = [r for r in results if r is not None]
+    with open(args.output, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(valid_results)
+
+    print(f"Evaluation complete. {len(valid_results)}/{len(jobs)} instances processed.")
 
     # Generate violin plots if enabled
     if HAS_PLOTTING and not args.no_plots:
