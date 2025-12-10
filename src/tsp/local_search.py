@@ -111,20 +111,11 @@ def lin_kernighan(solution: Solution, max_depth: int = 2) -> Solution:
     while improved:
         improved = False
         best_global_gain = 0.0
-        best_global_tour = current_tour
+        best_global_tour = None
 
         # Try starting the chain at each internal position
         for start_idx in range(1, n):
-            used_positions: Set[int] = {start_idx}
-            best_tour_local, best_gain_local = _lk_variable_depth(
-                current_tour,
-                start_idx,
-                used_positions,
-                depth=0,
-                max_depth=max_depth,
-                dist_matrix=dist_matrix,
-                current_gain=0.0,
-            )
+            best_tour_local, best_gain_local = _lk_chain(current_tour, start_idx, max_depth, dist_matrix)
 
             if best_gain_local > best_global_gain + 1e-12:
                 best_global_gain = best_gain_local
@@ -133,77 +124,61 @@ def lin_kernighan(solution: Solution, max_depth: int = 2) -> Solution:
         # Apply best chain found
         if best_global_gain > 1e-12:
             current_tour = best_global_tour
-            current_cost -= best_global_gain  # Update cost incrementally
+            current_cost -= best_global_gain
             improved = True
 
     return Solution(current_tour, dist_matrix, is_closed=True, cost=current_cost)
 
 
-def _lk_variable_depth(
+def _lk_chain(
     tour: List[int],
-    last_pos: int,
-    used_positions: Set[int],
-    depth: int,
+    start_pos: int,
     max_depth: int,
-    dist_matrix: NDArray[np.float64],
-    current_gain: float,
+    dist: NDArray[np.float64],
 ) -> Tuple[List[int], float]:
     """
-    Recursively explore variable-depth 2-opt chains.
+    Explore LK chain from a starting position using iterative approach.
 
-    Args:
-        tour: Current closed tour.
-        last_pos: Last position used in the chain (1..n-1).
-        used_positions: Positions already used (to avoid repetition).
-        depth: Current recursion depth.
-        max_depth: Maximum allowed depth.
-        dist_matrix: Distance matrix.
-        current_gain: Cumulative gain so far.
-
-    Returns:
-        Tuple of (best_tour, best_gain) from this subtree.
+    Returns (best_tour, best_gain) found.
     """
     n = len(tour) - 1
-    best_gain = current_gain
     best_tour = tour
+    best_gain = 0.0
 
-    if depth >= max_depth:
-        return best_tour, best_gain
+    # Stack: (current_tour, last_pos, used_set, depth, cumulative_gain)
+    stack = [(tour[:], start_pos, {start_pos}, 0, 0.0)]
 
-    for j in range(1, n):
-        if j == last_pos or abs(j - last_pos) == 1 or j in used_positions:
+    while stack:
+        cur_tour, last_pos, used, depth, gain = stack.pop()
+
+        if depth >= max_depth:
             continue
 
-        move_gain = _two_opt_gain(tour, last_pos, j, dist_matrix)
-        new_total_gain = current_gain + move_gain
+        for j in range(1, n):
+            if j == last_pos or abs(j - last_pos) == 1 or j in used:
+                continue
 
-        # Only continue if cumulative gain is positive
-        if new_total_gain <= 0:
-            continue
+            # Calculate gain
+            i, jj = (last_pos, j) if last_pos < j else (j, last_pos)
+            move_gain = -_two_opt_delta(cur_tour, i, jj, dist)
+            new_gain = gain + move_gain
 
-        new_tour = _apply_two_opt(tour, last_pos, j)
+            if new_gain <= 1e-12:
+                continue
 
-        if new_total_gain > best_gain + 1e-12:
-            best_gain = new_total_gain
-            best_tour = new_tour
+            # Apply move
+            new_tour = cur_tour[:]
+            new_tour[i:jj] = reversed(cur_tour[i:jj])
 
-        # Try deeper chains
-        new_used = set(used_positions)
-        new_used.add(j)
+            # Update best if improved
+            if new_gain > best_gain + 1e-12:
+                best_gain = new_gain
+                best_tour = new_tour
 
-        deeper_tour, deeper_gain = _lk_variable_depth(
-            new_tour,
-            j,
-            new_used,
-            depth + 1,
-            max_depth,
-            dist_matrix,
-            new_total_gain,
-        )
-
-        if deeper_gain > best_gain + 1e-12:
-            best_gain = deeper_gain
-            best_tour = deeper_tour
+            # Continue exploring (only if depth allows)
+            if depth + 1 < max_depth:
+                new_used = used | {j}
+                stack.append((new_tour, j, new_used, depth + 1, new_gain))
 
     return best_tour, best_gain
 
