@@ -64,10 +64,10 @@ class TestQILSIntegration:
         # Optimal cost for unit square = 4.0
         opt_cost = 4.0
 
-        # Exact optimal -> EXCELLENT
+        # Exact optimal -> EXCELLENT, reward = 1.0 (gap=0%)
         state, reward = qils.get_state(4.0, opt_cost)
         assert state == State.EXCELLENT
-        assert reward == 75
+        assert reward == 1.0
 
         # 1% gap -> EXCELLENT
         state, _ = qils.get_state(4.04, opt_cost)

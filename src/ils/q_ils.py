@@ -171,8 +171,20 @@ class QILS:
         """Load Q-table from file."""
         self.q_table = QTable.from_txt(path)
 
-    def get_state(self, cost: float, opt_cost: float) -> tuple[State, int]:
-        """Map cost to discrete state based on gap %. Returns (state, reward)."""
+    def get_state(self, cost: float, opt_cost: float) -> tuple[State, float]:
+        """
+        Map cost to discrete state and continuous reward based on gap %.
+
+        State is discretized for Q-table indexing, but reward is continuous
+        for more granular feedback: reward = max(0, 100 - gap).
+
+        Args:
+            cost: Current solution cost.
+            opt_cost: Optimal (or best known) cost.
+
+        Returns:
+            (state, reward): Discrete state and continuous reward.
+        """
         gap = ((cost - opt_cost) / opt_cost) * 100
         gap = round(gap, 7)
 
@@ -187,7 +199,10 @@ class QILS:
         else:
             state = State.POOR
 
-        return state, STATE_REWARDS[state]
+        # Continuous reward in [0, 1]: 1.0 at gap=0%, 0.0 at gap>=100%
+        reward = max(0.0, 1.0 - gap / 100.0)
+
+        return state, reward
 
     def choose_action(self, state: State, epsilon: float = 0.0) -> Action:
         """

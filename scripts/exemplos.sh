@@ -35,7 +35,7 @@ echo ""
 TYPES="EUC_2D ATT GEO"
 SIZES="10 20 30"
 LIMIT=100
-BETA=1.0
+BETA=0.01
 
 echo "Configuração:"
 echo "  Tipos:   $TYPES"

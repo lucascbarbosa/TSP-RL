@@ -25,13 +25,29 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 
 O estado é definido pelo **gap percentual** entre a solução atual e o ótimo conhecido:
 
-| Estado    | Gap (%)     | Recompensa | Interpretação          |
-|-----------|-------------|------------|------------------------|
-| EXCELLENT | 0 – 2       | 75         | Excelente              |
-| GOOD      | 2 – 5       | 50         | Bom                    |
-| REGULAR   | 5 – 10      | 25         | Regular                |
-| POOR      | > 10        | 0          | Ruim                   |
-| BETTER    | < 0         | 100        | Melhor que o ótimo     |
+| Estado    | Gap (%)     | Interpretação          |
+|-----------|-------------|------------------------|
+| EXCELLENT | 0 – 2       | Excelente              |
+| GOOD      | 2 – 5       | Bom                    |
+| REGULAR   | 5 – 10      | Regular                |
+| POOR      | > 10        | Ruim                   |
+| BETTER    | < 0         | Melhor que o ótimo     |
+
+### Recompensa
+
+A recompensa é **contínua** baseada no gap, independente do estado discreto:
+
+```
+reward = max(0, 1 - gap/100)
+```
+
+| Gap (%) | Recompensa |
+|---------|------------|
+| 0       | 1.00       |
+| 5       | 0.95       |
+| 10      | 0.90       |
+| 50      | 0.50       |
+| 100+    | 0.00       |
 
 ### Ações (9)
 
@@ -248,9 +264,9 @@ Os hiperparâmetros do framework são configurados em diferentes fases do pipeli
 | γ | `--gamma` | `train_qtable.py` | Treinamento Q-table | 0.99 | Discount factor (peso de recompensas futuras) |
 | ε | `--epsilon` | `evaluate.py` | Avaliação/Execução | 0.0 | Taxa de exploração (ε-greedy) |
 
-**Desconto temporal (β):** penaliza operadores mais lentos. O tempo é normalizado por O(n²) para que β tenha significado consistente entre tamanhos de instância:
+**Desconto temporal (β):** penaliza operadores mais lentos. O tempo é normalizado por O(n²) para consistência entre tamanhos:
 - Fórmula: `reward -= β * (tempo / t_ref)`, onde `t_ref = (n/100)²`
-- Referência: β=1 penaliza ~1 ponto por segundo em n=100
+- Referência: β=0.01 desconta ~1% da recompensa por segundo normalizado em n=100
 - Com `β = 0` (default), não há penalidade temporal
 
 ## Split de Dados
