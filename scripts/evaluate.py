@@ -166,9 +166,9 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
             problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
         )
 
-        # Calculate early_stop_target based on MIP gap
+        # Calculate early_stop_target based on MIP gap (fraction: 0.03 = 3%)
         # - gap == 0.0: tour is provably optimal, use primal_cost
-        # - gap > 0: use lower_bound = primal / (1 + gap/100)
+        # - gap > 0: use lower_bound = primal / (1 + gap)
         # - gap is None: no guarantee, disable early stop
         mip_gap = problem.mip_gap
         if not allow_early_stop:

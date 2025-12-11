@@ -54,6 +54,7 @@ def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
     Geographic distance (great-circle on Earth).
 
     Coordinates are in TSPLIB degree format (DDD.MM where MM is minutes).
+    Example: 38.24 means 38° 24' (38 degrees, 24 minutes).
     Used for ulysses16, ulysses22 etc. from TSPLIB.
     Vectorized implementation.
     """
@@ -61,7 +62,9 @@ def _geo(coords: NDArray[np.float64]) -> NDArray[np.float64]:
     PI = 3.141592
 
     # Convert TSPLIB degree format to radians (vectorized)
-    deg = np.floor(coords)
+    # Use trunc() to match TSPLIB int() behavior (truncate towards zero)
+    # floor() would give wrong results for negative coords (-38.24 -> -39 vs -38)
+    deg = np.trunc(coords)
     minutes = coords - deg
     radians = PI * (deg + 5.0 * minutes / 3.0) / 180.0
 
@@ -168,11 +171,29 @@ class TSPInstance:
         else:
             self.opt_tour = None
 
-        # Load MIP gap (duality gap from solver)
+        # Load MIP gap (duality gap from solver, as fraction: 0.03 = 3%)
         # gap=0 means tour is provably optimal
-        # gap>0 means solver didn't close gap (lower_bound = primal / (1 + gap/100))
+        # gap>0 means solver didn't close gap (lower_bound = primal / (1 + gap))
         # gap=None means no gap info available
-        self.mip_gap: Optional[float] = entry.get("gap")
+        self.mip_gap: Optional[float] = entry.get("gap", None)
+
+        # Compute optimal tour cost from distance matrix
+        if self.opt_tour is not None:
+            # opt_tour is 1-based closed tour, compute cost
+            self.opt_cost: Optional[float] = sum(
+                self.dist_matrix[self.opt_tour[i] - 1, self.opt_tour[(i + 1) % len(self.opt_tour)] - 1]
+                for i in range(len(self.opt_tour))
+            )
+            # Validate against JSON cost if provided
+            json_cost = entry.get("cost", None)
+            if json_cost is not None:
+                if abs(self.opt_cost - json_cost) > 1e-6:
+                    print(
+                        f"[WARNING] {self.name}: computed cost {self.opt_cost:.6f} "
+                        f"differs from JSON cost {json_cost:.6f}"
+                    )
+        else:
+            self.opt_cost = None
 
     def get_nodes(self) -> range:
         """Node indices {1, ..., n}."""
