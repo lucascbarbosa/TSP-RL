@@ -303,8 +303,10 @@ class QILS:
             pert_type, ls_type = ACTION_DECODE[action]
 
             # Apply perturbation and local search
+            start_operator_time = time.time()
             perturbed = self._apply_perturbation(ls_solution, pert_type)
             new_solution = self._apply_local_search(perturbed, ls_type)
+            end_operator_time = time.time()
 
             # Acceptance criterion
             if new_solution.cost < best_solution.cost:
@@ -318,6 +320,9 @@ class QILS:
 
             # Record transition
             f_state, reward = self.get_state(new_solution.cost, opt_cost)
+            time_discount = min(20, 10*(end_operator_time - start_operator_time))
+            reward -= time_discount
+            
             output_lines.append(f"{i_state.value} {action.value} {reward} {f_state.value}")
 
         with open(out_path, "w") as f:
