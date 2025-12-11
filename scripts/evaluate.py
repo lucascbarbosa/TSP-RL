@@ -294,6 +294,12 @@ def main() -> None:
         action="store_true",
         help="Disable early stop when reaching optimal cost",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of test instances per (type, size) pair",
+    )
     args = parser.parse_args()
 
     # Load processed instances and initialize CSV
@@ -331,7 +337,10 @@ def main() -> None:
         dimensions = get_instance_dimensions(dataset_path, test_instances)
 
         # Filter to instances with available Q-tables
+        # Group by size for limit enforcement
         filtered_count = 0
+        jobs_by_size: dict[int, list[tuple[int, str, int, float, bool]]] = {s: [] for s in available_sizes}
+
         for instance_id in test_instances:
             full_id = f"{instance_type}{instance_id}"
 
@@ -343,7 +352,14 @@ def main() -> None:
                 filtered_count += 1
                 continue
 
-            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop))
+            jobs_by_size[dim].append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop))
+
+        # Apply limit per size if specified
+        for size in sorted(jobs_by_size.keys()):
+            size_jobs = jobs_by_size[size]
+            if args.limit is not None:
+                size_jobs = size_jobs[: args.limit]
+            jobs.extend(size_jobs)
 
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")

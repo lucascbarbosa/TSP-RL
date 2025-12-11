@@ -84,6 +84,7 @@ echo "========================================"
 python scripts/evaluate.py \
     --types $TYPES \
     --sizes $SIZES \
+    --limit $LIMIT \
     --output data/results/results_exemplo.csv
 echo ""
 
