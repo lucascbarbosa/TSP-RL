@@ -3,12 +3,75 @@
 from __future__ import annotations
 
 import json
-import math
+import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
 
 import numpy as np
 from numpy.typing import NDArray
+
+
+# =============================================================================
+# JSON Loading (supports .json and .json.zip)
+# =============================================================================
+
+
+def _resolve_json_path(path: Union[str, Path]) -> Path:
+    """
+    Resolve JSON path, preferring .json over .json.zip.
+
+    Args:
+        path: Path to JSON file (with or without .zip extension).
+
+    Returns:
+        Resolved path (may have .zip added if .json doesn't exist).
+
+    Raises:
+        FileNotFoundError: If neither .json nor .json.zip exists.
+    """
+    p = Path(path)
+
+    # If path exists as-is, use it
+    if p.exists():
+        return p
+
+    # If path ends with .json, try .json.zip
+    if p.suffix == ".json":
+        zip_path = p.with_suffix(".json.zip")
+        if zip_path.exists():
+            return zip_path
+
+    # If path ends with .json.zip, try .json
+    if str(p).endswith(".json.zip"):
+        json_path = Path(str(p)[:-4])  # Remove .zip
+        if json_path.exists():
+            return json_path
+
+    raise FileNotFoundError(f"Neither {p} nor {p}.zip exists")
+
+
+def _load_json(path: Union[str, Path]) -> list[dict[str, Any]]:
+    """
+    Load JSON data from .json or .json.zip file.
+
+    Args:
+        path: Path to JSON file (resolved via _resolve_json_path).
+
+    Returns:
+        Parsed JSON data.
+    """
+    resolved = _resolve_json_path(path)
+
+    if resolved.suffix == ".zip":
+        # Extract JSON from zip (assumes single file inside with .json name)
+        with zipfile.ZipFile(resolved, "r") as zf:
+            # Get the JSON filename (same as zip but without .zip)
+            json_name = resolved.stem  # e.g., "EUC_2D.json" from "EUC_2D.json.zip"
+            with zf.open(json_name) as f:
+                return json.load(f)
+    else:
+        with open(resolved, "r") as f:
+            return json.load(f)
 
 
 # =============================================================================
@@ -98,8 +161,16 @@ DISTANCE_METRICS: dict[str, Callable[[NDArray[np.float64]], NDArray[np.float64]]
 
 
 def _infer_edge_weight_type(path: Union[str, Path]) -> str:
-    """Infer edge weight type from filename (e.g., 'GEO.json' -> 'GEO')."""
-    stem = Path(path).stem.upper()
+    """Infer edge weight type from filename (e.g., 'GEO.json' or 'GEO.json.zip' -> 'GEO')."""
+    name = Path(path).name.upper()
+    # Handle .json.zip -> remove both suffixes
+    if name.endswith(".JSON.ZIP"):
+        stem = name[:-9]
+    elif name.endswith(".JSON"):
+        stem = name[:-5]
+    else:
+        stem = Path(path).stem.upper()
+
     if stem in DISTANCE_METRICS:
         return stem
     return "EUC_2D"  # Default fallback
@@ -142,8 +213,7 @@ class TSPInstance:
         if preloaded_data is not None:
             data = preloaded_data
         else:
-            with open(path, "r") as f:
-                data = json.load(f)
+            data = _load_json(path)
 
         entry = data[instance_id]
         coords = entry["coords"]
@@ -230,8 +300,7 @@ class TSPDataset:
         self.edge_weight_type = edge_weight_type or _infer_edge_weight_type(json_file_path)
 
         print(f"Loading {json_file_path} into memory...")
-        with open(json_file_path, "r") as f:
-            self.data_in_memory = json.load(f)
+        self.data_in_memory = _load_json(json_file_path)
         print(f"Loaded {len(self.data_in_memory)} raw instances. Active subset: {len(self.indices)}")
 
     def __len__(self) -> int:
