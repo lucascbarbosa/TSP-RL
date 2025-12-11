@@ -31,7 +31,7 @@ O estado é definido pelo **gap percentual** entre a solução atual e o ótimo 
 | GOOD      | 2 – 5       | 50         | Bom                    |
 | REGULAR   | 5 – 10      | 25         | Regular                |
 | POOR      | > 10        | 0          | Ruim                   |
-| BETTER    | < 0         | 100        | Melhor que o ótimo     |
+| BETTER    | < 0         | 100        | Melhor que o bfs       |
 
 ### Ações (8)
 
