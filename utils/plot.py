@@ -668,13 +668,14 @@ def plot_gap_and_time_violins(
     Shows gap (left, blue) and time (right, orange) for each instance size.
 
     Args:
-        results_by_size: {size: {"gaps": [...], "times": [...]}}
+        results_by_size: {size: {"gaps": [...], "times": [...] (ms internally)}}
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
     sizes = sorted(results_by_size.keys())
     gaps_data = [results_by_size[s]["gaps"] for s in sizes]
-    times_data = [results_by_size[s]["times"] for s in sizes]
+    # Convert ms to seconds for display
+    times_data = [[t / 1000 for t in results_by_size[s]["times"]] for s in sizes]
 
     # Adjust figure width based on number of sizes
     fig_width = max(8, len(sizes) * 1.2 + 2)
@@ -716,7 +717,7 @@ def plot_gap_and_time_violins(
     for partname in ["cbars", "cmins", "cmaxes"]:
         parts_time[partname].set_color("#666666")
 
-    ax2.set_ylabel("Time (ms)")
+    ax2.set_ylabel("Time (s)")
     ax2.set_xlabel("Instance Size (n)")
     ax2.set_xticks(range(len(sizes)))
     ax2.set_xticklabels([str(s) for s in sizes])
@@ -746,13 +747,14 @@ def plot_time_vs_gap_scatter(
 
     Args:
         gaps: List of gap percentages.
-        times: List of execution times (ms).
+        times: List of execution times (ms internally, displayed in seconds).
         title: Plot title.
         highlight_suboptimal: Highlight instances with gap > 0.
         save_path: Path to save figure (displays if None).
     """
     gaps_arr = np.array(gaps)
-    times_arr = np.array(times)
+    # Convert ms to seconds for display
+    times_arr = np.array(times) / 1000
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -791,7 +793,7 @@ def plot_time_vs_gap_scatter(
                 color=COLORS["quaternary"],
                 linestyle=":",
                 alpha=0.7,
-                label=f"Subopt. mean time: {mean_time_sub:.0f}ms",
+                label=f"Subopt. mean time: {mean_time_sub:.2f}s",
             )
     else:
         ax.scatter(
@@ -804,7 +806,7 @@ def plot_time_vs_gap_scatter(
             linewidth=0.3,
         )
 
-    ax.set_xlabel("Execution Time (ms)")
+    ax.set_xlabel("Execution Time (s)")
     ax.set_ylabel("Gap (%)")
     ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
     ax.legend(loc="upper right", framealpha=0.9)
@@ -833,19 +835,19 @@ def plot_suboptimal_time_analysis(
     Shows time distribution only for instances that didn't reach the optimum.
 
     Args:
-        results_by_size: {size: {"gaps": [...], "times": [...]}}
+        results_by_size: {size: {"gaps": [...], "times": [...] (ms internally)}}
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
     sizes = sorted(results_by_size.keys())
 
-    # Filter to suboptimal instances only
+    # Filter to suboptimal instances only, convert ms to seconds
     subopt_times: Dict[int, List[float]] = {}
     subopt_counts: Dict[int, Tuple[int, int]] = {}  # (suboptimal, total)
 
     for size in sizes:
         gaps = np.array(results_by_size[size]["gaps"])
-        times = np.array(results_by_size[size]["times"])
+        times = np.array(results_by_size[size]["times"]) / 1000  # Convert to seconds
         mask = gaps > 0.001  # Small threshold for floating point
         subopt_times[size] = times[mask].tolist()
         subopt_counts[size] = (mask.sum(), len(gaps))
@@ -894,7 +896,7 @@ def plot_suboptimal_time_analysis(
     ax.set_xticks(range(len(sizes_with_subopt)))
     ax.set_xticklabels([str(s) for s in sizes_with_subopt])
     ax.set_xlabel("Instance Size (n)")
-    ax.set_ylabel("Execution Time (ms)")
+    ax.set_ylabel("Execution Time (s)")
 
     if title:
         ax.set_title(title)
