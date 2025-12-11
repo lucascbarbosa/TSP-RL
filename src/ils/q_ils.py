@@ -31,9 +31,9 @@ from src.rl.q_table import QTable
 class RunStats:
     """Statistics from a Q-ILS run."""
 
-    # Timing
-    total_time_ms: float = 0.0
-    init_time_ms: float = 0.0  # Time for initial solution
+    # Timing (in seconds)
+    total_time: float = 0.0
+    init_time: float = 0.0  # Time for initial solution
 
     # Iterations
     total_iterations: int = 0
@@ -54,8 +54,8 @@ class RunStats:
     def to_dict(self) -> dict:
         """Convert to flat dictionary for CSV export."""
         d = {
-            "total_time_ms": self.total_time_ms,
-            "init_time_ms": self.init_time_ms,
+            "total_time": self.total_time,
+            "init_time": self.init_time,
             "total_iterations": self.total_iterations,
             "best_iteration": self.best_iteration,
             "improvements": self.improvements,
@@ -274,6 +274,7 @@ class QILS:
         max_iter: int = 50,
         opt_cost: float = 0.0,
         out_path: Union[str, Path] = "transitions.txt",
+        beta: float = 0.0,
     ) -> Solution:
         """
         Generate transition data for MDP training.
@@ -284,6 +285,8 @@ class QILS:
             max_iter: Maximum iterations without improvement.
             opt_cost: Optimal cost for state calculation.
             out_path: Output file path.
+            beta: Time discount weight. Penalizes slower operators by subtracting
+                  beta * operator_time (in seconds) from the reward. Default 0.0.
 
         Returns:
             Best solution found.
@@ -304,11 +307,11 @@ class QILS:
             action = random.choice(action_list)
             pert_type, ls_type = ACTION_DECODE[action]
 
-            # Apply perturbation and local search
-            start_operator_time = time.time()
+            # Apply perturbation and local search (time in seconds)
+            t_start = time.perf_counter()
             perturbed = self._apply_perturbation(ls_solution, pert_type)
             new_solution = self._apply_local_search(perturbed, ls_type)
-            end_operator_time = time.time()
+            operator_time = time.perf_counter() - t_start
 
             # Acceptance criterion
             if new_solution.cost < best_solution.cost:
@@ -320,12 +323,12 @@ class QILS:
             # Update current solution
             ls_solution = new_solution
 
-            # Record transition
+            # Record transition with time-discounted reward
             f_state, reward = self.get_state(new_solution.cost, opt_cost)
-            time_discount = min(20, 10*(end_operator_time - start_operator_time))
-            reward -= time_discount
-            
-            output_lines.append(f"{i_state.value} {action.value} {reward} {f_state.value}")
+            if beta > 0:
+                reward -= beta * operator_time
+
+            output_lines.append(f"{i_state.value} {action.value} {reward:.2f} {f_state.value}")
 
         with open(out_path, "w") as f:
             f.write("\n".join(output_lines))
@@ -377,7 +380,7 @@ class QILS:
         t_init = time.perf_counter()
         ls_solution = self._get_initial_solution()
         best_solution = ls_solution.copy()
-        stats.init_time_ms = (time.perf_counter() - t_init) * 1000
+        stats.init_time = time.perf_counter() - t_init
 
         # Record initial solution quality
         stats.initial_cost = ls_solution.cost
@@ -434,7 +437,7 @@ class QILS:
                 )
 
         # Finalize stats
-        stats.total_time_ms = (time.perf_counter() - t_start) * 1000
+        stats.total_time = time.perf_counter() - t_start
         stats.total_iterations = iteration
         stats.best_iteration = best_iteration
         stats.final_cost = best_solution.cost

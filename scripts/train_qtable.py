@@ -164,7 +164,7 @@ def main() -> None:
                 min_n_actions=8,  # 8 actions (5 perturbations x 2 local searches, with omissions)
                 min_n_states=5,  # 5 states (gap-based)
             )
-            train_time_ms = (time.perf_counter() - t_start) * 1000
+            train_time = time.perf_counter() - t_start
 
             # Record training stats
             iterations_used = len(history.get("avg_q_value", []))
@@ -175,7 +175,7 @@ def main() -> None:
                     "size": n_cities,
                     "n_files": len(paths),
                     "iterations": iterations_used,
-                    "time_ms": train_time_ms,
+                    "time": train_time,
                     "final_avg_q": final_avg_q,
                     "gamma": args.gamma,
                 }

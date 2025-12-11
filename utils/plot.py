@@ -138,19 +138,21 @@ def load_results_from_csv(
             gap_str = row["Gap"].replace("%", "")
             gap_value = float(gap_str)
 
-            # Parse time (ms) - handle both old "Time" (seconds) and new "Time (ms)" formats
-            if "Time (ms)" in row:
-                time_ms = float(row["Time (ms)"])
+            # Parse time (seconds) - handle multiple column name formats for backwards compatibility
+            if "Time (s)" in row:
+                time_s = float(row["Time (s)"])
+            elif "Time (ms)" in row:
+                time_s = float(row["Time (ms)"]) / 1000  # Convert ms to s
             elif "Time" in row:
-                time_ms = float(row["Time"]) * 1000  # Convert s to ms
+                time_s = float(row["Time"])  # Assume seconds
             else:
-                time_ms = 0.0
+                time_s = 0.0
 
             # Parse iterations if available
             iterations = int(row.get("Total Iterations", 0))
 
             data[instance_type][dimension]["gaps"].append(gap_value)
-            data[instance_type][dimension]["times"].append(time_ms)
+            data[instance_type][dimension]["times"].append(time_s)
             data[instance_type][dimension]["iterations"].append(iterations)
 
     # Convert defaultdicts to regular dicts
@@ -669,14 +671,13 @@ def plot_gap_and_time_violins(
     Shows gap (left, blue) and time (right, orange) for each instance size.
 
     Args:
-        results_by_size: {size: {"gaps": [...], "times": [...] (ms internally)}}
+        results_by_size: {size: {"gaps": [...], "times": [...] (seconds)}}
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
     sizes = sorted(results_by_size.keys())
     gaps_data = [results_by_size[s]["gaps"] for s in sizes]
-    # Convert ms to seconds for display
-    times_data = [[t / 1000 for t in results_by_size[s]["times"]] for s in sizes]
+    times_data = [results_by_size[s]["times"] for s in sizes]
 
     # Adjust figure width based on number of sizes
     fig_width = max(8, len(sizes) * 1.2 + 2)
@@ -748,14 +749,13 @@ def plot_time_vs_gap_scatter(
 
     Args:
         gaps: List of gap percentages.
-        times: List of execution times (ms internally, displayed in seconds).
+        times: List of execution times (seconds).
         title: Plot title.
         highlight_suboptimal: Highlight instances with gap > 0.
         save_path: Path to save figure (displays if None).
     """
     gaps_arr = np.array(gaps)
-    # Convert ms to seconds for display
-    times_arr = np.array(times) / 1000
+    times_arr = np.array(times)
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -836,19 +836,19 @@ def plot_suboptimal_time_analysis(
     Shows time distribution only for instances that didn't reach the optimum.
 
     Args:
-        results_by_size: {size: {"gaps": [...], "times": [...] (ms internally)}}
+        results_by_size: {size: {"gaps": [...], "times": [...] (seconds)}}
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
     sizes = sorted(results_by_size.keys())
 
-    # Filter to suboptimal instances only, convert ms to seconds
+    # Filter to suboptimal instances only
     subopt_times: Dict[int, List[float]] = {}
     subopt_counts: Dict[int, Tuple[int, int]] = {}  # (suboptimal, total)
 
     for size in sizes:
         gaps = np.array(results_by_size[size]["gaps"])
-        times = np.array(results_by_size[size]["times"]) / 1000  # Convert to seconds
+        times = np.array(results_by_size[size]["times"])
         mask = gaps > 0.001  # Small threshold for floating point
         subopt_times[size] = times[mask].tolist()
         subopt_counts[size] = (mask.sum(), len(gaps))

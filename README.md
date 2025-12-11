@@ -238,6 +238,18 @@ solution = Solution(tour, dist_matrix, is_closed=True)
 improved = LOCAL_SEARCHES["two_opt"](solution)  # usa seleção adaptativa por padrão
 ```
 
+## Hiperparâmetros
+
+Os hiperparâmetros do framework são configurados em diferentes fases do pipeline:
+
+| Símbolo | Flag | Script | Fase | Default | Descrição |
+|---------|------|--------|------|---------|-----------|
+| β | `--beta` | `train_transitions.py` | Geração de transições | 0.0 | Peso do desconto temporal nas recompensas |
+| γ | `--gamma` | `train_qtable.py` | Treinamento Q-table | 0.99 | Discount factor (peso de recompensas futuras) |
+| ε | `--epsilon` | `evaluate.py` | Avaliação/Execução | 0.0 | Taxa de exploração (ε-greedy) |
+
+**Desconto temporal (β):** penaliza operadores mais lentos subtraindo `β * tempo_operador` (em segundos) da recompensa. Com `β = 0` (default), não há penalidade temporal.
+
 ## Split de Dados
 
 O split train/test usa seed=42 para reprodutibilidade e compatibilidade com outros grupos:

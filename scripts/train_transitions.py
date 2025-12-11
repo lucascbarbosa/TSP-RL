@@ -38,6 +38,7 @@ def process_instance(
     tsp_instance: TSPInstance,
     output_dir: str,
     max_iter: int,
+    beta: float,
 ) -> str:
     """
     Generate transitions for a single instance.
@@ -46,6 +47,7 @@ def process_instance(
         tsp_instance: TSP instance to process.
         output_dir: Directory for output files.
         max_iter: Max iterations without improvement.
+        beta: Time discount weight for rewards.
 
     Returns:
         Status message.
@@ -67,7 +69,7 @@ def process_instance(
 
     # Initialize solver and generate transitions
     solver = QILS(tsp_instance)
-    solver.generate_transitions(max_iter=max_iter, opt_cost=opt_cost, out_path=out_name)
+    solver.generate_transitions(max_iter=max_iter, opt_cost=opt_cost, out_path=out_name, beta=beta)
 
     return f"Processed {tsp_instance.name}"
 
@@ -111,6 +113,12 @@ def main() -> None:
         type=int,
         default=50,
         help="Max iterations without improvement (default: 50)",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=0.0,
+        help="Time discount weight for rewards (default: 0.0, no discount)",
     )
     parser.add_argument(
         "--workers",
@@ -167,13 +175,15 @@ def main() -> None:
     num_cores = args.workers if args.workers is not None else max(1, multiprocessing.cpu_count() - 2)
     print(f"\n--- Starting Transition Generation on {num_cores} cores ---")
     print(f"Saving results to: {args.output_dir}")
-    print(f"Max iterations per instance: {args.max_iter}\n")
+    print(f"Max iterations per instance: {args.max_iter}")
+    print(f"Time discount (beta): {args.beta}\n")
 
     # Create worker function with fixed parameters
     worker_func = partial(
         process_instance,
         output_dir=args.output_dir,
         max_iter=args.max_iter,
+        beta=args.beta,
     )
 
     # Use 'spawn' context to avoid CUDA re-initialization issues with fork

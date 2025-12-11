@@ -122,9 +122,9 @@ def initialize_csv(filename: str) -> None:
                     "Optimal Cost",
                     "Best Cost",
                     "Gap",
-                    # Timing (ms)
-                    "Time (ms)",
-                    "Init Time (ms)",
+                    # Timing (seconds)
+                    "Time (s)",
+                    "Init Time (s)",
                     # Iteration stats
                     "Total Iterations",
                     "Best Iteration",
@@ -204,7 +204,7 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
         early_str = " [EARLY]" if stats.early_stopped else ""
         print(
             f"DONE: {full_id} | Gap: {stats.final_gap:.2f}% | "
-            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}{early_str}"
+            f"Time: {stats.total_time:.2f}s | Iter: {stats.total_iterations}{early_str}"
         )
 
         return [
@@ -218,9 +218,9 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
             primal_cost,
             best_solution.cost,
             f"{stats.final_gap:.4f}%",
-            # Timing (ms)
-            f"{stats.total_time_ms:.2f}",
-            f"{stats.init_time_ms:.2f}",
+            # Timing (seconds)
+            f"{stats.total_time:.4f}",
+            f"{stats.init_time:.4f}",
             # Iteration stats
             stats.total_iterations,
             stats.best_iteration,
