@@ -103,7 +103,7 @@ class Action(IntEnum):
     MDP actions: combinations of (perturbation, local_search).
 
     Light perturbations: two_swap, segment_reverse
-    Destructive perturbations: random, nearest, cheapest (rebuild from scratch)
+    Destructive perturbations: random, nearest, cheapest, grasp (rebuild from scratch)
     """
 
     TWO_SWAP_2OPT = 0
@@ -114,6 +114,7 @@ class Action(IntEnum):
     NEAREST_2OPT = 5
     CHEAPEST_2OPT = 6
     NEAREST_LK = 7
+    GRASP_2OPT = 8
 
 
 # Action to (perturbation, local_search) mapping
@@ -126,6 +127,7 @@ ACTION_DECODE: dict[Action, tuple[str, str]] = {
     Action.NEAREST_2OPT: ("nearest", "two_opt"),
     Action.CHEAPEST_2OPT: ("cheapest", "two_opt"),
     Action.NEAREST_LK: ("nearest", "lin_kernighan"),
+    Action.GRASP_2OPT: ("grasp", "two_opt"),
 }
 
 # Reverse mapping

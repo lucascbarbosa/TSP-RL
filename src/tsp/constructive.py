@@ -61,6 +61,96 @@ def nearest_neighbor(
     return tour, tour_cost
 
 
+def grasp(
+    problem: TSPInstance,
+    alpha: float = 0.2,
+    use_median_range: bool = True,
+    start_node: int | None = None,
+) -> tuple[list[int], float]:
+    """
+    GRASP constructive phase (Greedy Randomized Adaptive Search Procedure).
+
+    Builds a tour incrementally by selecting the next city from a Restricted
+    Candidate List (RCL) of "good enough" candidates:
+
+        RCL = {candidates | dist <= min_dist + alpha * (upper_bound - min_dist)}
+
+    Args:
+        problem: TSP instance.
+        alpha: Greediness parameter in [0, 1]:
+            - alpha=0.0: Pure greedy (equivalent to nearest neighbor)
+            - alpha=1.0: Fully random selection
+            - alpha=0.1-0.3: Good balance between quality and diversity
+        use_median_range: If True, use median distance as upper_bound (more
+            conservative, ignores outliers). If False, use max distance.
+        start_node: Starting city (1-based). If None, random selection.
+
+    Returns:
+        (closed_tour, cost) tuple.
+    """
+    n = problem.dimension
+    dist = problem.dist_matrix  # 0-based indexing
+
+    if n <= 2:
+        return random_tour(problem)
+
+    # Work with 0-based indices
+    if start_node is None:
+        current_idx = random.randrange(n)
+    else:
+        current_idx = start_node - 1
+
+    visited = [False] * n
+    tour_indices = [current_idx]
+    visited[current_idx] = True
+    tour_cost = 0.0
+
+    # Build tour incrementally
+    for _ in range(n - 1):
+        # Collect candidates (unvisited cities) with their distances
+        candidates = []
+        min_dist = float("inf")
+        max_dist = float("-inf")
+
+        for j in range(n):
+            if not visited[j]:
+                d = dist[current_idx, j]
+                candidates.append((j, d))
+                min_dist = min(min_dist, d)
+                max_dist = max(max_dist, d)
+
+        # Compute upper bound for RCL threshold
+        if use_median_range and len(candidates) > 1:
+            distances_sorted = sorted(d for _, d in candidates)
+            upper_bound = distances_sorted[len(distances_sorted) // 2]
+        else:
+            upper_bound = max_dist
+
+        # Build RCL: candidates within threshold
+        threshold = min_dist + alpha * (upper_bound - min_dist)
+        rcl = [city_idx for city_idx, d in candidates if d <= threshold]
+
+        # Select randomly from RCL (fallback to best if RCL empty due to float precision)
+        if rcl:
+            next_idx = random.choice(rcl)
+            next_dist = dist[current_idx, next_idx]
+        else:
+            next_idx, next_dist = min(candidates, key=lambda x: x[1])
+
+        tour_indices.append(next_idx)
+        visited[next_idx] = True
+        tour_cost += next_dist
+        current_idx = next_idx
+
+    # Add return edge
+    tour_cost += dist[tour_indices[-1], tour_indices[0]]
+
+    # Convert to 1-based closed tour
+    closed_tour = [idx + 1 for idx in tour_indices] + [tour_indices[0] + 1]
+
+    return closed_tour, float(tour_cost)
+
+
 def cheapest_insertion(
     problem: TSPInstance,
     start_node: int | None = None,
@@ -153,4 +243,5 @@ CONSTRUCTIVES: dict[str, Callable[[TSPInstance], tuple[list[int], float]]] = {
     "random": random_tour,
     "nearest": nearest_neighbor,
     "cheapest": cheapest_insertion,
+    "grasp": grasp,
 }

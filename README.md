@@ -33,7 +33,7 @@ O estado é definido pelo **gap percentual** entre a solução atual e o ótimo 
 | POOR      | > 10        | 0          | Ruim                   |
 | BETTER    | < 0         | 100        | Melhor que o ótimo     |
 
-### Ações (8)
+### Ações (9)
 
 Cada ação é um par **(perturbação, busca local)**:
 
@@ -47,10 +47,11 @@ Cada ação é um par **(perturbação, busca local)**:
 | NEAREST_2OPT         | nearest          | 2-opt          | Restart de qualidade     |
 | CHEAPEST_2OPT        | cheapest         | 2-opt          | Restart alta qualidade   |
 | NEAREST_LK           | nearest          | Lin-Kernighan  | Restart + intensificação |
+| GRASP_2OPT           | grasp            | 2-opt          | Restart diversificado    |
 
 **Tipos de perturbação:**
 - **Leves** (`two_swap`, `segment_reverse`): modificam levemente a solução atual
-- **Destrutivas** (`random`, `nearest`, `cheapest`): ignoram a solução atual e constroem uma nova do zero
+- **Destrutivas** (`random`, `nearest`, `cheapest`, `grasp`): ignoram a solução atual e constroem uma nova do zero
 
 **Buscas locais:**
 - **2-opt**: O(n²), rápido e eficiente
@@ -66,7 +67,7 @@ TSP-RL/
 │   │   ├── instance.py          # TSPInstance, TSPDataset
 │   │   ├── local_search.py      # two_opt(), lin_kernighan() + LOCAL_SEARCHES
 │   │   ├── perturbation.py      # two_swap(), segment_reverse() + PERTURBATIONS
-│   │   └── constructive.py      # random_tour(), nearest_neighbor(), cheapest_insertion() + CONSTRUCTIVES
+│   │   └── constructive.py      # random_tour(), nearest_neighbor(), cheapest_insertion(), grasp() + CONSTRUCTIVES
 │   ├── ils/                     # Framework ILS
 │   │   └── q_ils.py             # QILS, State, Action, N_STATES, N_ACTIONS
 │   └── rl/                      # Reinforcement Learning
@@ -163,6 +164,7 @@ Os operadores são funções standalone com registros `Dict[str, Callable]` para
 - **random**: tour aleatório
 - **nearest**: adiciona sempre a cidade mais próxima
 - **cheapest**: insere na posição de menor aumento de custo
+- **grasp**: GRASP (seleciona de uma lista restrita de candidatos "bons o suficiente")
 
 ### Buscas Locais (`LOCAL_SEARCHES`)
 
@@ -226,8 +228,8 @@ from src import LOCAL_SEARCHES, PERTURBATIONS, CONSTRUCTIVES, N_STATES, N_ACTION
 # Número de operadores disponíveis
 print(f"Buscas locais: {len(LOCAL_SEARCHES)}")      # 2
 print(f"Perturbações: {len(PERTURBATIONS)}")        # 2
-print(f"Construtivas: {len(CONSTRUCTIVES)}")        # 3
-print(f"Estados: {N_STATES}, Ações: {N_ACTIONS}")   # 5, 8
+print(f"Construtivas: {len(CONSTRUCTIVES)}")        # 4
+print(f"Estados: {N_STATES}, Ações: {N_ACTIONS}")   # 5, 9
 
 # Chamar operadores pelo nome
 from src import Solution
