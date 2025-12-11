@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from src.tsp.instance import TSPInstance
+from src.tsp.instance import TSPInstance, _load_json
 from src.ils.q_ils import QILS
 
 # Optional plotting utilities
@@ -66,14 +66,13 @@ def get_instance_dimensions(dataset_path: str, instance_ids: list[int]) -> dict[
     Get dimensions for specific instances from dataset.
 
     Args:
-        dataset_path: Path to dataset JSON file.
+        dataset_path: Path to dataset JSON file (supports .json.zip).
         instance_ids: List of instance IDs to check.
 
     Returns:
         Dict mapping instance_id -> dimension.
     """
-    with open(dataset_path, "r") as f:
-        data = json.load(f)
+    data = _load_json(dataset_path)
 
     dimensions: dict[int, int] = {}
     for idx in instance_ids:
@@ -125,9 +124,9 @@ def initialize_csv(filename: str) -> None:
                     "Optimal Cost",
                     "Best Cost",
                     "Gap",
-                    # Timing (ms)
-                    "Time (ms)",
-                    "Init Time (ms)",
+                    # Timing (seconds)
+                    "Time (s)",
+                    "Init Time (s)",
                     # Iteration stats
                     "Total Iterations",
                     "Best Iteration",
@@ -219,7 +218,7 @@ def process_instance(args: tuple[int, str, int, float, bool, Optional[str]]) -> 
         early_str = " [EARLY]" if stats.early_stopped else ""
         print(
             f"DONE: {full_id} | Gap: {stats.final_gap:.2f}% | "
-            f"Time: {stats.total_time_ms:.0f}ms | Iter: {stats.total_iterations}{early_str}"
+            f"Time: {stats.total_time:.2f}s | Iter: {stats.total_iterations}{early_str}"
         )
 
         return [
@@ -233,9 +232,9 @@ def process_instance(args: tuple[int, str, int, float, bool, Optional[str]]) -> 
             primal_cost,
             best_solution.cost,
             f"{stats.final_gap:.4f}%",
-            # Timing (ms)
-            f"{stats.total_time_ms:.2f}",
-            f"{stats.init_time_ms:.2f}",
+            # Timing (seconds)
+            f"{stats.total_time:.4f}",
+            f"{stats.init_time:.4f}",
             # Iteration stats
             stats.total_iterations,
             stats.best_iteration,
@@ -338,12 +337,12 @@ def main() -> None:
         splits = json.load(f)
 
     # Determine if cross-domain mode is requested
-    cross_domain = (args.source_type is not None and args.source_size is not None)
+    cross_domain = args.source_type is not None and args.source_size is not None
 
     # If cross-domain and target_sizes were not specified, defaults to 10, 20, ..., 100
     if cross_domain:
         if args.target_sizes is None:
-            target_sizes = list(range(10, 101, 10)) # [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+            target_sizes = list(range(10, 101, 10))  # [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
         else:
             target_sizes = args.target_sizes
         # build source q-table path and check existence
@@ -385,7 +384,9 @@ def main() -> None:
                     continue
 
                 if dim in target_sizes:
-                    jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop, str(source_qtable)))
+                    jobs.append(
+                        (instance_id, instance_type, args.max_iter, args.epsilon, early_stop, str(source_qtable))
+                    )
         else:
             # Original behavior: only evaluate instances that have a Q-table for their size
             available_sizes = get_available_sizes(instance_type)
