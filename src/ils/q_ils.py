@@ -14,7 +14,14 @@ from numpy.typing import NDArray
 
 from src.tsp.constructive import CONSTRUCTIVES
 from src.tsp.instance import TSPInstance
-from src.tsp.local_search import LOCAL_SEARCHES, two_opt
+from src.tsp.local_search import (
+    LOCAL_SEARCHES,
+    two_opt,
+    lin_kernighan,
+    _build_neighbor_lists,
+    _resolve_k,
+    _THRESHOLD_NN,
+)
 from src.tsp.perturbation import PERTURBATIONS
 from src.tsp.solution import Solution
 from src.rl.q_table import QTable
@@ -137,7 +144,7 @@ class QILS:
     selects an action according to the learned Q-table.
     """
 
-    def __init__(self, problem: TSPInstance) -> None:
+    def __init__(self, problem: TSPInstance, k: int | float = 0.5) -> None:
         self.problem = problem
         # Reuse precomputed distance matrix from instance (already 0-based)
         self.dist_matrix = problem.dist_matrix
@@ -149,6 +156,14 @@ class QILS:
         self.last_action: Optional[Action] = None
         self.last_state: Optional[State] = None
         self.last_stats: Optional[RunStats] = None
+
+        # Pre-compute neighbor lists for instances large enough to benefit
+        n = problem.dimension
+        if n >= _THRESHOLD_NN:
+            k_resolved = _resolve_k(k, n)
+            self._neighbors = _build_neighbor_lists(self.dist_matrix, k_resolved)
+        else:
+            self._neighbors = None
 
     def load_q_table(self, path: Union[str, Path]) -> None:
         """Load Q-table from file."""
@@ -226,6 +241,8 @@ class QILS:
         """
         Apply local search to solution.
 
+        Uses pre-computed neighbor lists when available for 2-opt variants.
+
         Args:
             solution: Input solution.
             ls_type: Local search type name.
@@ -233,16 +250,22 @@ class QILS:
         Returns:
             Improved solution.
         """
-        if ls_type not in LOCAL_SEARCHES:
+        if ls_type == "two_opt":
+            # Use cached neighbors if available
+            return two_opt(solution, neighbors=self._neighbors)
+        elif ls_type == "lin_kernighan":
+            return lin_kernighan(solution)
+        elif ls_type in LOCAL_SEARCHES:
+            return LOCAL_SEARCHES[ls_type](solution)
+        else:
             raise ValueError(f"Unknown local search type: {ls_type}")
-        return LOCAL_SEARCHES[ls_type](solution)
 
     def _get_initial_solution(self) -> Solution:
         """Generate initial solution via random constructive + 2-opt."""
         constructive_choice = random.choice(list(CONSTRUCTIVES.keys()))
         tour, _ = CONSTRUCTIVES[constructive_choice](self.problem)
         initial_solution = Solution(tour, self.dist_matrix, is_closed=True)
-        return two_opt(initial_solution)
+        return two_opt(initial_solution, neighbors=self._neighbors)
 
     def generate_transitions(
         self,

@@ -22,6 +22,8 @@ def _build_neighbor_lists(
     """
     Build k-nearest neighbor lists for each city.
 
+    Uses argpartition for O(n + k log k) per city instead of O(n log n).
+
     Args:
         dist_matrix: Distance matrix (n x n), 0-based indexing.
         k: Number of nearest neighbors to keep.
@@ -33,21 +35,28 @@ def _build_neighbor_lists(
     n = dist_matrix.shape[0]
     k = min(k, n - 1)  # can't have more neighbors than n-1
 
-    # For each city, get indices sorted by distance (excluding self)
-    # argsort gives indices; we skip index 0 (self, distance=0) and take next k
     neighbors = np.zeros((n, k), dtype=np.int32)
 
     for i in range(n):
-        # Sort by distance, exclude self
-        sorted_indices = np.argsort(dist_matrix[i])
-        # Skip self (first element after sort, which has distance 0)
-        neighbor_indices = sorted_indices[sorted_indices != i][:k]
-        neighbors[i, : len(neighbor_indices)] = neighbor_indices
+        dists = dist_matrix[i]
+        # argpartition: O(n) to get k+1 smallest (including self)
+        # We need k+1 because self (distance 0) will be among the smallest
+        kp1 = min(k + 1, n)
+        candidate_indices = np.argpartition(dists, kp1 - 1)[:kp1]
+        # Remove self from candidates
+        candidate_indices = candidate_indices[candidate_indices != i]
+        # Sort the k candidates by distance: O(k log k)
+        sorted_candidates = candidate_indices[np.argsort(dists[candidate_indices])]
+        neighbors[i, : len(sorted_candidates)] = sorted_candidates[:k]
 
     return neighbors
 
 
-def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
+def two_opt_nn(
+    solution: Solution,
+    k: int | float = 0.5,
+    neighbors: NDArray[np.int32] | None = None,
+) -> Solution:
     """
     2-opt with neighbor lists for O(n·k) complexity per pass.
 
@@ -59,6 +68,8 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
         solution: Input solution (closed tour).
         k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
            interpreted as proportion of n (default 0.5 = 50% of cities).
+        neighbors: Pre-computed neighbor lists (optional). If provided, k is
+           ignored and these lists are used directly. Shape: (n, k_actual).
 
     Returns:
         Improved solution.
@@ -68,11 +79,10 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
     dist_matrix = solution.dist_matrix
     n = len(tour) - 1
 
-    # Resolve k: int as-is, float as proportion
-    k_resolved = _resolve_k(k, n)
-
-    # Build neighbor lists (0-based city indices)
-    neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
+    # Use pre-computed neighbors or build new ones
+    if neighbors is None:
+        k_resolved = _resolve_k(k, n)
+        neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
 
     # Position array: pos[city] = position in tour (1-based city to 0-based position)
     # tour uses 1-based cities, so pos[city-1] = position
@@ -87,7 +97,7 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
         best_i, best_j = -1, -1
 
         # For each position i (where segment starts)
-        for i in range(1, n - 1):
+        for i in range(1, n):
             a = tour[i - 1] - 1  # city before segment (0-based)
 
             # Check only k nearest neighbors of a as potential new connection
@@ -98,8 +108,8 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
                 j_minus_1 = pos[c]  # position of city c+1 (1-based)
                 j = j_minus_1 + 1
 
-                # Validate: j must be > i+1 and < n (valid segment)
-                if j <= i + 1 or j >= n:
+                # Validate: j must be > i+1 and <= n (valid segment)
+                if j <= i + 1 or j > n:
                     continue
 
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
@@ -121,7 +131,11 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
     return Solution(tour, dist_matrix, is_closed=True, cost=cost)
 
 
-def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
+def two_opt_dlb(
+    solution: Solution,
+    k: int | float = 0.5,
+    neighbors: NDArray[np.int32] | None = None,
+) -> Solution:
     """
     2-opt with Neighbor Lists + Don't Look Bits for maximum speed.
 
@@ -133,6 +147,8 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
         solution: Input solution (closed tour).
         k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
            interpreted as proportion of n (default 0.5 = 50% of cities).
+        neighbors: Pre-computed neighbor lists (optional). If provided, k is
+           ignored and these lists are used directly. Shape: (n, k_actual).
 
     Returns:
         Improved solution.
@@ -142,11 +158,10 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
     dist_matrix = solution.dist_matrix
     n = len(tour) - 1
 
-    # Resolve k: int as-is, float as proportion
-    k_resolved = _resolve_k(k, n)
-
-    # Build neighbor lists
-    neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
+    # Use pre-computed neighbors or build new ones
+    if neighbors is None:
+        k_resolved = _resolve_k(k, n)
+        neighbors = _build_neighbor_lists(dist_matrix, k_resolved)
 
     # Position array
     pos = np.zeros(n, dtype=np.int32)
@@ -160,7 +175,7 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
     while improved:
         improved = False
 
-        for i in range(1, n - 1):
+        for i in range(1, n):
             city_at_i = tour[i] - 1  # 0-based city index
 
             # Skip if this city is marked as "don't look"
@@ -178,7 +193,7 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
                 j_minus_1 = pos[c]
                 j = j_minus_1 + 1
 
-                if j <= i + 1 or j >= n:
+                if j <= i + 1 or j > n:
                     continue
 
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
@@ -223,7 +238,11 @@ def _resolve_k(k: int | float, n: int) -> int:
     return int(k)
 
 
-def two_opt_adaptive(solution: Solution, k: int | float = 0.5) -> Solution:
+def two_opt_adaptive(
+    solution: Solution,
+    k: int | float = 0.5,
+    neighbors: NDArray[np.int32] | None = None,
+) -> Solution:
     """
     Adaptive 2-opt that selects the best variant based on instance size.
 
@@ -236,6 +255,8 @@ def two_opt_adaptive(solution: Solution, k: int | float = 0.5) -> Solution:
         solution: Input solution (closed tour).
         k: Number of nearest neighbors. If int, used as-is. If float in (0,1),
            interpreted as proportion of n (default 0.5 = 50% of cities).
+        neighbors: Pre-computed neighbor lists (optional). If provided, k is
+           ignored and these lists are used directly. Shape: (n, k_actual).
 
     Returns:
         Improved solution.
@@ -245,9 +266,9 @@ def two_opt_adaptive(solution: Solution, k: int | float = 0.5) -> Solution:
     if n < _THRESHOLD_NN:
         return two_opt_full(solution)
     elif n < _THRESHOLD_DLB:
-        return two_opt_nn(solution, k=k)
+        return two_opt_nn(solution, k=k, neighbors=neighbors)
     else:
-        return two_opt_dlb(solution, k=k)
+        return two_opt_dlb(solution, k=k, neighbors=neighbors)
 
 
 def _two_opt_delta(
@@ -311,8 +332,8 @@ def two_opt_full(solution: Solution) -> Solution:
         best_i, best_j = -1, -1
 
         # Find best improving move
-        for i in range(1, n - 1):
-            for j in range(i + 2, n):  # j > i+1 to skip adjacent
+        for i in range(1, n):
+            for j in range(i + 2, n + 1):  # j > i+1 to skip adjacent
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
                 if delta < best_delta - 1e-10:
                     best_delta = delta
@@ -390,7 +411,7 @@ def _lk_chain(
         if depth >= max_depth:
             continue
 
-        for j in range(1, n):
+        for j in range(1, n + 1):
             if j == last_pos or abs(j - last_pos) == 1 or j in used:
                 continue
 
