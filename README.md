@@ -248,7 +248,10 @@ Os hiperparâmetros do framework são configurados em diferentes fases do pipeli
 | γ | `--gamma` | `train_qtable.py` | Treinamento Q-table | 0.99 | Discount factor (peso de recompensas futuras) |
 | ε | `--epsilon` | `evaluate.py` | Avaliação/Execução | 0.0 | Taxa de exploração (ε-greedy) |
 
-**Desconto temporal (β):** penaliza operadores mais lentos subtraindo `β * tempo_operador` (em segundos) da recompensa. Com `β = 0` (default), não há penalidade temporal.
+**Desconto temporal (β):** penaliza operadores mais lentos. O tempo é normalizado por O(n²) para que β tenha significado consistente entre tamanhos de instância:
+- Fórmula: `reward -= β * (tempo / t_ref)`, onde `t_ref = (n/100)²`
+- Referência: β=1 penaliza ~1 ponto por segundo em n=100
+- Com `β = 0` (default), não há penalidade temporal
 
 ## Split de Dados
 

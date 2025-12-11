@@ -35,11 +35,13 @@ echo ""
 TYPES="EUC_2D ATT GEO"
 SIZES="10 20 30"
 LIMIT=100
+BETA=1.0
 
 echo "Configuração:"
 echo "  Tipos:   $TYPES"
 echo "  Tamanhos: $SIZES"
 echo "  Limite:  $LIMIT instâncias por (tipo, tamanho)"
+echo "  Beta:    $BETA (desconto temporal)"
 echo ""
 
 # Step 1: Generate splits (if not exists)
@@ -64,7 +66,8 @@ for type in $TYPES; do
         --dataset_path "data/${type}.json" \
         --output_dir "data/train/${type}" \
         --sizes $SIZES \
-        --limit $LIMIT
+        --limit $LIMIT \
+        --beta $BETA
     echo ""
 done
 

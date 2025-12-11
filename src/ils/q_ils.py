@@ -286,7 +286,9 @@ class QILS:
             opt_cost: Optimal cost for state calculation.
             out_path: Output file path.
             beta: Time discount weight. Penalizes slower operators by subtracting
-                  beta * operator_time (in seconds) from the reward. Default 0.0.
+                  beta * normalized_time from the reward. Time is normalized by
+                  O(n²) so that beta has consistent meaning across instance sizes.
+                  Reference: 1 second at n=100. Default 0.0 (no penalty).
 
         Returns:
             Best solution found.
@@ -298,6 +300,10 @@ class QILS:
         output_lines: list[str] = []
 
         action_list = list(ACTION_DECODE.keys())
+
+        # Time normalization: t_ref = 1s for n=100 (scales as O(n²))
+        n = self.problem.dimension
+        t_ref = (n / 100) ** 2
 
         while iter_without_improvement < max_iter:
             # Current state
@@ -326,7 +332,7 @@ class QILS:
             # Record transition with time-discounted reward
             f_state, reward = self.get_state(new_solution.cost, opt_cost)
             if beta > 0:
-                reward -= beta * operator_time
+                reward -= beta * (operator_time / t_ref)
 
             output_lines.append(f"{i_state.value} {action.value} {reward:.2f} {f_state.value}")
 
