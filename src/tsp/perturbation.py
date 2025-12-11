@@ -20,9 +20,6 @@ def two_swap(solution: Solution) -> Solution:
     i, j = random.sample(range(1, n), 2)
     tour[i], tour[j] = tour[j], tour[i]
 
-    # Maintain closed tour
-    tour[-1] = tour[0]
-
     return Solution(tour, solution.dist_matrix, is_closed=True)
 
 
@@ -37,7 +34,6 @@ def segment_reverse(solution: Solution) -> Solution:
     # Select random segment to reverse
     i, j = sorted(random.sample(range(1, n), 2))
     tour[i:j] = reversed(tour[i:j])
-    tour[-1] = tour[0]
 
     return Solution(tour, solution.dist_matrix, is_closed=True)
 

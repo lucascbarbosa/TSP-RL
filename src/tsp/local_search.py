@@ -87,7 +87,7 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
         best_i, best_j = -1, -1
 
         # For each position i (where segment starts)
-        for i in range(1, n - 1):
+        for i in range(1, n):
             a = tour[i - 1] - 1  # city before segment (0-based)
 
             # Check only k nearest neighbors of a as potential new connection
@@ -98,8 +98,8 @@ def two_opt_nn(solution: Solution, k: int | float = 0.5) -> Solution:
                 j_minus_1 = pos[c]  # position of city c+1 (1-based)
                 j = j_minus_1 + 1
 
-                # Validate: j must be > i+1 and < n (valid segment)
-                if j <= i + 1 or j >= n:
+                # Validate: j must be > i+1 and <= n (valid segment)
+                if j <= i + 1 or j > n:
                     continue
 
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
@@ -160,7 +160,7 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
     while improved:
         improved = False
 
-        for i in range(1, n - 1):
+        for i in range(1, n):
             city_at_i = tour[i] - 1  # 0-based city index
 
             # Skip if this city is marked as "don't look"
@@ -178,7 +178,7 @@ def two_opt_dlb(solution: Solution, k: int | float = 0.5) -> Solution:
                 j_minus_1 = pos[c]
                 j = j_minus_1 + 1
 
-                if j <= i + 1 or j >= n:
+                if j <= i + 1 or j > n:
                     continue
 
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
@@ -311,8 +311,8 @@ def two_opt_full(solution: Solution) -> Solution:
         best_i, best_j = -1, -1
 
         # Find best improving move
-        for i in range(1, n - 1):
-            for j in range(i + 2, n):  # j > i+1 to skip adjacent
+        for i in range(1, n):
+            for j in range(i + 2, n + 1):  # j > i+1 to skip adjacent
                 delta = _two_opt_delta(tour, i, j, dist_matrix)
                 if delta < best_delta - 1e-10:
                     best_delta = delta
@@ -390,7 +390,7 @@ def _lk_chain(
         if depth >= max_depth:
             continue
 
-        for j in range(1, n):
+        for j in range(1, n + 1):
             if j == last_pos or abs(j - last_pos) == 1 or j in used:
                 continue
 

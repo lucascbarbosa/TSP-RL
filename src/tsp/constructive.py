@@ -103,11 +103,6 @@ def cheapest_insertion(
         tour_cost += best_delta
         unvisited.remove(best_city)
 
-    # Ensure closed tour
-    if tour[0] != tour[-1]:
-        tour.append(tour[0])
-        tour_cost += problem.get_weight(tour[-2], tour[-1])
-
     return tour, tour_cost
 
 
