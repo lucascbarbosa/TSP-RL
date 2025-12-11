@@ -39,6 +39,7 @@ ACTION_LABELS = [
     "near+2opt",
     "cheap+2opt",
     "near+LK",
+    "grasp+2opt",
 ]
 
 
