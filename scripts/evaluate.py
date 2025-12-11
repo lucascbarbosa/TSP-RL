@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from src.tsp.instance import TSPInstance
+from src.tsp.instance import TSPInstance, _load_json
 from src.ils.q_ils import QILS
 
 # Optional plotting utilities
@@ -64,14 +64,13 @@ def get_instance_dimensions(dataset_path: str, instance_ids: list[int]) -> dict[
     Get dimensions for specific instances from dataset.
 
     Args:
-        dataset_path: Path to dataset JSON file.
+        dataset_path: Path to dataset JSON file (or .json.zip).
         instance_ids: List of instance IDs to check.
 
     Returns:
         Dict mapping instance_id -> dimension.
     """
-    with open(dataset_path, "r") as f:
-        data = json.load(f)
+    data = _load_json(dataset_path)
 
     dimensions: dict[int, int] = {}
     for idx in instance_ids:

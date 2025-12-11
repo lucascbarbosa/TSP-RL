@@ -5,10 +5,19 @@ Gera splits train/test para as instancias TSP.
 Compativel com o split usado pelo outro grupo da disciplina (seed=42, 90/10).
 """
 
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import argparse
 import json
 import random
-import argparse
-from pathlib import Path
+
+from src.tsp.instance import _resolve_json_path, _load_json
 
 
 def generate_split(n_instances: int, seed: int = 42, train_ratio: float = 0.9):
@@ -66,20 +75,21 @@ def main():
 
     for filename in instance_files:
         filepath = data_dir / filename
-        if not filepath.exists():
-            print(f"[!] {filepath} not found, skipping...")
+        try:
+            resolved = _resolve_json_path(filepath)
+        except FileNotFoundError:
+            print(f"[!] {filepath} (or .zip) not found, skipping...")
             continue
 
-        with open(filepath, "r") as f:
-            data = json.load(f)
-
+        data = _load_json(resolved)
         n_instances = len(data)
         train_ids, test_ids = generate_split(n_instances, seed=args.seed, train_ratio=args.train_ratio)
 
+        # Key uses .json (canonical name) for compatibility
         key = f"data/{filename}"
         splits[key] = {"train": train_ids, "test": test_ids}
 
-        print(f"{filename}:")
+        print(f"{filename} (from {resolved.name}):")
         print(f"  Total:  {n_instances}")
         print(f"  Train:  {len(train_ids)} ({len(train_ids)/n_instances*100:.1f}%)")
         print(f"  Test:   {len(test_ids)} ({len(test_ids)/n_instances*100:.1f}%)")
