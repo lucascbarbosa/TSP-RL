@@ -263,6 +263,56 @@ def load_model(
     return model
 
 
+def compute_q_matrix(
+    model: QNetwork,
+    gap_levels: list[float] | None = None,
+    t_ratio: float = 0.5,
+    n_actions: int = N_ACTIONS,
+    history_len: int = 2,
+) -> np.ndarray:
+    """
+    Compute Q-values for discretized gap levels.
+
+    Creates a matrix of Q-values by querying the network at synthetic
+    states with varying gap levels. Useful for visualizing learned policy.
+
+    Args:
+        model: Trained Q-network.
+        gap_levels: Gap percentages to evaluate (default: [0, 1, 2, 5, 10, 20, 50]).
+        t_ratio: Fixed time ratio for states (default: 0.5).
+        n_actions: Number of actions (default: 21).
+        history_len: History length (default: 2).
+
+    Returns:
+        Matrix of shape (len(gap_levels), n_actions) with Q-values.
+    """
+    if gap_levels is None:
+        gap_levels = [0, 1, 2, 5, 10, 20, 50]
+
+    # Normalize gaps using same function as DQNState
+    def normalize_gap(gap: float) -> float:
+        return float(np.log1p(gap) / np.log1p(100))
+
+    q_matrix = np.zeros((len(gap_levels), n_actions))
+
+    model.eval()
+    with torch.no_grad():
+        for i, gap in enumerate(gap_levels):
+            # Create state: g=g_best=gap, t_ratio fixed, empty history
+            g_norm = normalize_gap(gap)
+            state = [g_norm, g_norm, t_ratio]
+
+            # Empty history (one-hot with no action selected)
+            for _ in range(history_len):
+                state.extend([0.0] * n_actions)
+
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            q_values = model(state_tensor).squeeze(0).numpy()
+            q_matrix[i, :] = q_values
+
+    return q_matrix
+
+
 __all__ = [
     "DQNConfig",
     "TrainingStats",
@@ -271,5 +321,6 @@ __all__ = [
     "compute_time_budget",
     "save_model",
     "load_model",
+    "compute_q_matrix",
     "N_ACTIONS",
 ]

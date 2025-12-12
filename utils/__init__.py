@@ -11,6 +11,7 @@ from utils.plot import (
     # DQN training
     plot_learning_curve,
     plot_action_distribution,
+    plot_q_values_heatmap,
     # Results analysis
     plot_gap_distribution,
     plot_gap_by_size,
@@ -33,6 +34,7 @@ __all__ = [
     "generate_gap_violin_plots",
     "plot_learning_curve",
     "plot_action_distribution",
+    "plot_q_values_heatmap",
     "plot_gap_distribution",
     "plot_gap_by_size",
     "plot_gap_violins_by_size",

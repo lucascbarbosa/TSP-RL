@@ -318,6 +318,76 @@ def plot_action_distribution(
         plt.close()
 
 
+def plot_q_values_heatmap(
+    q_matrix: NDArray[np.float64],
+    gap_labels: Optional[List[str]] = None,
+    action_labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot Q-values as a heatmap over discretized gap levels.
+
+    Creates a 2D visualization analogous to Q-table heatmaps.
+    Y-axis shows gap levels, X-axis shows actions, color indicates Q-values.
+
+    Args:
+        q_matrix: Matrix of shape (n_gaps, n_actions) with Q-values.
+                  Use compute_q_matrix() from src.rl.dqn to generate this.
+        gap_labels: Labels for Y-axis (default: ["0%", "1%", ...]).
+        action_labels: Labels for X-axis (default: ["A0", "A1", ...]).
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+
+    Example:
+        >>> from src.rl.dqn import compute_q_matrix, load_model, N_ACTIONS
+        >>> model = load_model("model.pt", state_dim=45)
+        >>> q_matrix = compute_q_matrix(model)
+        >>> plot_q_values_heatmap(q_matrix, title="Learned Q-values")
+    """
+    n_gaps, n_actions = q_matrix.shape
+
+    # Default labels
+    if gap_labels is None:
+        default_gaps = [0, 1, 2, 5, 10, 20, 50]
+        gap_labels = [f"{g}%" for g in default_gaps[:n_gaps]]
+    if action_labels is None:
+        action_labels = [f"A{i}" for i in range(n_actions)]
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    im = ax.imshow(q_matrix, aspect="auto", cmap="YlOrRd")
+
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Q-value", rotation=270, labelpad=15)
+
+    # Axis labels
+    ax.set_xticks(range(n_actions))
+    ax.set_xticklabels(action_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks(range(n_gaps))
+    ax.set_yticklabels(gap_labels)
+    ax.set_xlabel("Action")
+    ax.set_ylabel("Gap Level")
+
+    # Highlight best action per gap level with border
+    for i in range(n_gaps):
+        best_action = int(np.argmax(q_matrix[i, :]))
+        ax.add_patch(plt.Rectangle((best_action - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="black", linewidth=2))
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
 # =============================================================================
 # Results Analysis Plots
 # =============================================================================
