@@ -21,7 +21,7 @@ import json
 
 import numpy as np
 
-from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model
+from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model, N_ACTIONS
 from src.tsp.instance import TSPDataset
 
 
@@ -181,6 +181,7 @@ def main() -> None:
         stats_dict = {
             "type": args.type,
             "size": size,
+            "n_actions": N_ACTIONS,
             "n_episodes": args.episodes,
             "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
             "test_avg_gap": float(avg_gap) if test_instances else None,

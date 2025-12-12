@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 
 from src.rl.dqn.buffer import ReplayBuffer
-from src.rl.dqn.env import DQNEnv
+from src.rl.dqn.env import DQNEnv, N_ACTIONS
 from src.rl.dqn.network import QNetwork
 from src.tsp.instance import TSPInstance
 
@@ -97,15 +97,15 @@ def train_dqn(
     # Infer instance size from first instance
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
-    state_dim = 3 + config.history_len * 9
+    state_dim = 3 + config.history_len * N_ACTIONS
 
     if verbose:
         print(f"Training DQN: n={n}, time_budget={time_budget:.2f}s")
-        print(f"State dim: {state_dim}, Episodes: {config.n_episodes}")
+        print(f"State dim: {state_dim}, Actions: {N_ACTIONS}, Episodes: {config.n_episodes}")
 
     # Initialize networks
-    q_net = QNetwork(state_dim, hidden_dim=config.hidden_dim).to(config.device)
-    target_net = QNetwork(state_dim, hidden_dim=config.hidden_dim).to(config.device)
+    q_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
+    target_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
     target_net.load_state_dict(q_net.state_dict())
     target_net.eval()
 
@@ -250,9 +250,14 @@ def save_model(model: QNetwork, path: str | Path) -> None:
     torch.save(model.state_dict(), path)
 
 
-def load_model(path: str | Path, state_dim: int, hidden_dim: int = 64) -> QNetwork:
+def load_model(
+    path: str | Path,
+    state_dim: int,
+    n_actions: int = N_ACTIONS,
+    hidden_dim: int = 64,
+) -> QNetwork:
     """Load model weights from file."""
-    model = QNetwork(state_dim, hidden_dim=hidden_dim)
+    model = QNetwork(state_dim, n_actions=n_actions, hidden_dim=hidden_dim)
     model.load_state_dict(torch.load(path, weights_only=True))
     model.eval()
     return model
@@ -266,4 +271,5 @@ __all__ = [
     "compute_time_budget",
     "save_model",
     "load_model",
+    "N_ACTIONS",
 ]

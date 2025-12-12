@@ -12,7 +12,7 @@ Modules:
 """
 
 from src.rl.dqn.buffer import Batch, ReplayBuffer, Transition
-from src.rl.dqn.env import DQNEnv
+from src.rl.dqn.env import ACTION_DECODE, N_ACTIONS, DQNEnv
 from src.rl.dqn.network import QNetwork
 from src.rl.dqn.state import DQNState, compute_delta_reward, normalize_gap
 from src.rl.dqn.trainer import (
@@ -26,6 +26,9 @@ from src.rl.dqn.trainer import (
 )
 
 __all__ = [
+    # Actions
+    "N_ACTIONS",
+    "ACTION_DECODE",
     # State
     "DQNState",
     "normalize_gap",
