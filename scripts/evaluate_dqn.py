@@ -59,18 +59,18 @@ def parse_model_name(model_path: str) -> tuple[str, int]:
     return match.group(1), int(match.group(2))
 
 
-def evaluate_baseline_grasp(instance, n_restarts: int = 5) -> tuple[float, float, int]:
+def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float, int]:
     """
-    Baseline: GRASP + 2-opt full with multiple restarts.
+    Baseline: GRASP + 2-opt full with time budget.
 
-    Runs n_restarts iterations of GRASP construction followed by
-    intensive 2-opt local search, keeping the best solution found.
+    Runs GRASP construction followed by intensive 2-opt local search
+    repeatedly until time budget is exhausted, keeping the best solution.
 
     Args:
         instance: TSP instance to solve.
-        n_restarts: Number of GRASP restarts (default: 5).
+        time_budget: Time budget in seconds (same as DQN evaluation).
 
-    Returns: (best_gap, time_seconds, n_restarts)
+    Returns: (best_gap, time_seconds, iterations)
     """
     t0 = time.perf_counter()
 
@@ -79,8 +79,9 @@ def evaluate_baseline_grasp(instance, n_restarts: int = 5) -> tuple[float, float
     opt_cost = sum(instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
 
     best_cost = float("inf")
+    iterations = 0
 
-    for _ in range(n_restarts):
+    while time.perf_counter() - t0 < time_budget:
         # GRASP construction (alpha=0.2 default)
         tour, _ = grasp(instance)
         sol = Solution(tour, instance.dist_matrix, is_closed=True)
@@ -90,11 +91,12 @@ def evaluate_baseline_grasp(instance, n_restarts: int = 5) -> tuple[float, float
 
         if improved.cost < best_cost:
             best_cost = improved.cost
+        iterations += 1
 
     elapsed = time.perf_counter() - t0
     gap = ((best_cost - opt_cost) / opt_cost) * 100
 
-    return gap, elapsed, n_restarts
+    return gap, elapsed, iterations
 
 
 def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, float, int]:
@@ -281,7 +283,7 @@ def main() -> None:
 
             # Baseline evaluation
             if args.baseline:
-                gap_bl, time_bl, iters_bl = evaluate_baseline_grasp(instance, n_restarts=5)
+                gap_bl, time_bl, iters_bl = evaluate_baseline_grasp(instance, time_budget)
                 results.append(
                     {
                         "Type": instance_type,

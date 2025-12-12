@@ -21,10 +21,10 @@ set -e
 
 # Instance selection
 TYPES="EUC_2D"              # Space-separated: "EUC_2D ATT GEO"
-SIZES="10 20 30"            # Space-separated: "10 20 30 50 100"
+SIZES="10 20"               # Space-separated: "10 20 30 50 100"
 
 # Training hyperparameters
-EPISODES=500                # Number of training episodes (default: 2000)
+EPISODES=200                # Number of training episodes (default: 2000)
 TIME_BUDGET=10.0            # Base time budget in seconds
 GAMMA=0.99                  # Discount factor
 LR=0.001                    # Learning rate
@@ -36,7 +36,7 @@ TRAIN_LIMIT=100             # Limit training instances per size
 EVAL_LIMIT=20               # Limit evaluation instances per size
 
 # Evaluation
-BASELINE=true               # Include GRASP+2opt baseline comparison
+BASELINE=true               # Include GRASP+2opt baseline (same time budget as DQN)
 
 # Device
 DEVICE="cpu"                # "cpu" or "cuda"
@@ -234,6 +234,21 @@ done
 echo ""
 
 # =============================================================================
+# Step 4: Generate plots
+# =============================================================================
+
+echo "========================================"
+echo "4. Generating plots..."
+echo "========================================"
+
+python scripts/generate_plots.py \
+    --models "models/dqn/*.pt" \
+    --results "data/results/*.csv" \
+    --history_len "$HISTORY_LEN" \
+    --hidden_dim "$HIDDEN_DIM"
+echo ""
+
+# =============================================================================
 # Done
 # =============================================================================
 
@@ -244,6 +259,4 @@ echo ""
 echo "Outputs:"
 echo "  Models:  models/dqn/"
 echo "  Results: data/results/"
-echo ""
-echo "To visualize results:"
-echo "  python -c \"from utils import plot_learning_curve; ...\""
+echo "  Plots:   data/plots/"
