@@ -87,6 +87,12 @@ def main() -> None:
         help="Hidden layer dimension (default: 64)",
     )
     parser.add_argument(
+        "--history_len",
+        type=int,
+        default=2,
+        help="Number of past actions in state (default: 2)",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default="cpu",
@@ -153,6 +159,7 @@ def main() -> None:
         # Configure training
         config = DQNConfig(
             time_budget=args.time_budget,
+            history_len=args.history_len,
             n_episodes=args.episodes,
             gamma=args.gamma,
             lr=args.lr,

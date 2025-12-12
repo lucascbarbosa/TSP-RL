@@ -54,7 +54,7 @@ class TestDQNEnvIntegration:
         instance = TSPInstance(temp_instance_file, instance_id=0)
         env = DQNEnv(instance, time_budget=1.0)
         assert env.n_actions == N_ACTIONS
-        assert env.state_dim == 3 + 3 * N_ACTIONS  # 3 + history_len * n_actions
+        assert env.state_dim == 3 + 2 * N_ACTIONS  # 3 + history_len * n_actions
 
     def test_env_reset_and_step(self, temp_instance_file):
         """DQNEnv reset and step should work correctly."""

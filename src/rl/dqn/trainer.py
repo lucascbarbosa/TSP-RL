@@ -22,7 +22,7 @@ class DQNConfig:
 
     # Environment
     time_budget: float = 10.0  # Base time budget (scales with n)
-    history_len: int = 3  # Number of past actions in state
+    history_len: int = 2  # Number of past actions in state
 
     # DQN hyperparameters
     gamma: float = 0.99  # Discount factor

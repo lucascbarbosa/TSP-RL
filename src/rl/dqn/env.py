@@ -78,7 +78,7 @@ class DQNEnv:
         self,
         instance: TSPInstance,
         time_budget: float,
-        history_len: int = 3,
+        history_len: int = 2,
         k: int | float = 0.5,
     ) -> None:
         """

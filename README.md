@@ -21,7 +21,7 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 
 ## Modelagem MDP
 
-### Estado (contínuo, 66 dimensões)
+### Estado (contínuo, 45 dimensões)
 
 O estado é um vetor contínuo que captura:
 
@@ -30,7 +30,7 @@ O estado é um vetor contínuo que captura:
 | `g` | 1 | Gap atual normalizado (log scale) |
 | `g_best` | 1 | Melhor gap do episódio (normalizado) |
 | `t_ratio` | 1 | Tempo restante / T ∈ [0, 1] |
-| `history` | 63 | Últimas 3 ações (one-hot encoded, 21 cada) |
+| `history` | 42 | Últimas 2 ações (one-hot encoded, 21 cada) |
 
 **Normalização do gap:** `g_norm = log(1 + gap) / log(101)` — comprime gaps grandes, preserva resolução em gaps pequenos.
 
@@ -148,7 +148,7 @@ print(f"Gap médio final: {np.mean(stats.episode_best_gaps[-100:]):.2f}%")
 from src import TSPDataset, load_model, evaluate_dqn, DQNConfig, N_ACTIONS
 
 # Carregar modelo treinado
-state_dim = 3 + 3 * N_ACTIONS  # 66 com history_len=3
+state_dim = 3 + 2 * N_ACTIONS  # 45 com history_len=2
 model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=state_dim)
 
 # Avaliar em instâncias de teste
@@ -165,10 +165,10 @@ print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")
 from src import TSPInstance, DQNEnv, N_ACTIONS
 
 instance = TSPInstance("data/EUC_2D.json", instance_id=0)
-env = DQNEnv(instance, time_budget=5.0, history_len=3)
+env = DQNEnv(instance, time_budget=5.0, history_len=2)
 
 state = env.reset()
-print(f"State dim: {env.state_dim}")  # 66
+print(f"State dim: {env.state_dim}")  # 45
 print(f"N_ACTIONS: {N_ACTIONS}")      # 21
 
 while True:
@@ -199,7 +199,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 class DQNConfig:
     # Ambiente
     time_budget: float = 10.0   # T(n) = (n/100)² × time_budget
-    history_len: int = 3        # Ações no histórico
+    history_len: int = 2        # Ações no histórico
 
     # DQN
     gamma: float = 0.99
@@ -221,10 +221,10 @@ class DQNConfig:
 ## Arquitetura da Rede
 
 ```
-QNetwork: state (66) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
+QNetwork: state (45) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
 ```
 
-- Input: estado contínuo (66 dims com history_len=3 e 21 ações)
+- Input: estado contínuo (45 dims com history_len=2 e 21 ações)
 - Output: Q-values para cada uma das 21 ações
 - ~6K parâmetros
 

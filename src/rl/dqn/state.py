@@ -72,7 +72,7 @@ class DQNState:
     g: float
     g_best: float
     t_ratio: float
-    history: tuple[int, ...] = field(default_factory=lambda: (-1, -1, -1))
+    history: tuple[int, ...] = field(default_factory=lambda: (-1, -1))
     n_actions: int = 21  # Default to current action space size
 
     def to_numpy(self) -> np.ndarray:
@@ -94,7 +94,7 @@ class DQNState:
         return np.array(base + history_onehot, dtype=np.float32)
 
     @staticmethod
-    def dim(history_len: int = 3, n_actions: int = 21) -> int:
+    def dim(history_len: int = 2, n_actions: int = 21) -> int:
         """
         Get state vector dimension.
 
