@@ -1,286 +1,270 @@
-# Q-ILS: Q-Learning para Iterated Local Search no TSP
+# DQN-ILS: Deep Q-Network para Iterated Local Search no TSP
 
-Framework que integra **Q-Learning** ao **Iterated Local Search (ILS)** para resolver o Problema do Caixeiro Viajante (TSP).
+Framework que integra **Deep Q-Network (DQN)** ao **Iterated Local Search (ILS)** para resolver o Problema do Caixeiro Viajante (TSP).
 
 ## Ideia Central
 
-No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma busca local. O Q-ILS permite que um **agente de RL aprenda qual par (perturbação, busca local)** usar em função do estado atual da solução.
+No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma busca local. O DQN-ILS permite que um **agente de RL aprenda qual par (perturbação, busca local)** usar em função do estado contínuo da busca.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Loop do Q-ILS                        │
+│                       Loop do DQN-ILS                       │
 ├─────────────────────────────────────────────────────────────┤
-│  1. Observar estado s (gap percentual)                      │
-│  2. Consultar Q-table: a = argmax Q(s, a)                   │
+│  1. Observar estado s = (g, g_best, t_ratio, history)       │
+│  2. Consultar rede Q: a = argmax Q(s, a; θ)                 │
 │  3. Decodificar ação: a → (perturbação, busca local)        │
-│  4. Aplicar perturbação à solução atual                     │
-│  5. Aplicar busca local                                     │
-│  6. Atualizar melhor solução se houve melhora               │
+│  4. Aplicar perturbação + busca local                       │
+│  5. Calcular recompensa: r = Δg_best (melhoria no recorde)  │
+│  6. Repetir até esgotar time budget T                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Modelagem MDP
 
-### Estados (5)
+### Estado (contínuo, 45 dimensões)
 
-O estado é definido pelo **gap percentual** entre a solução atual e o ótimo conhecido:
+O estado é um vetor contínuo que captura:
 
-| Estado    | Gap (%)     | Interpretação          |
-|-----------|-------------|------------------------|
-| EXCELLENT | 0 – 2       | Excelente              |
-| GOOD      | 2 – 5       | Bom                    |
-| REGULAR   | 5 – 10      | Regular                |
-| POOR      | > 10        | Ruim                   |
-| BETTER    | < 0         | Melhor que o ótimo     |
+| Componente | Dimensão | Descrição |
+|------------|----------|-----------|
+| `g` | 1 | Gap atual normalizado (log scale) |
+| `g_best` | 1 | Melhor gap do episódio (normalizado) |
+| `t_ratio` | 1 | Tempo restante / T ∈ [0, 1] |
+| `history` | 42 | Últimas 2 ações (one-hot encoded, 21 cada) |
+
+**Normalização do gap:** `g_norm = log(1 + gap) / log(101)` — comprime gaps grandes, preserva resolução em gaps pequenos.
 
 ### Recompensa
 
-A recompensa é **contínua** baseada no gap, independente do estado discreto:
+A recompensa é a **melhoria no melhor gap** encontrado:
 
 ```
-reward = max(0, 1 - gap/100)
+reward = g_best_old - g_best_new
 ```
 
-| Gap (%) | Recompensa |
-|---------|------------|
-| 0       | 1.00       |
-| 5       | 0.95       |
-| 10      | 0.90       |
-| 50      | 0.50       |
-| 100+    | 0.00       |
+- Recompensa > 0 apenas quando o agente melhora o recorde
+- Alinha o sinal de recompensa com o objetivo real (minimizar gap)
+- Sparse mas informativo
 
-### Ações (9)
+### Ações (21)
 
-Cada ação é um par **(perturbação, busca local)**:
+Cada ação é um par **(perturbação, busca local)**, com variantes de 2-opt expostas individualmente:
 
-| Ação                 | Perturbação      | Busca Local    | Uso                      |
-|----------------------|------------------|----------------|--------------------------|
-| TWO_SWAP_2OPT        | two_swap         | 2-opt          | Refinamento leve         |
-| TWO_SWAP_LK          | two_swap         | Lin-Kernighan  | Refinamento moderado     |
-| SEGMENT_REVERSE_2OPT | segment_reverse  | 2-opt          | Perturbação média        |
-| SEGMENT_REVERSE_LK   | segment_reverse  | Lin-Kernighan  | Perturbação + intensif.  |
-| RANDOM_2OPT          | random           | 2-opt          | Restart rápido           |
-| NEAREST_2OPT         | nearest          | 2-opt          | Restart de qualidade     |
-| CHEAPEST_2OPT        | cheapest         | 2-opt          | Restart alta qualidade   |
-| NEAREST_LK           | nearest          | Lin-Kernighan  | Restart + intensificação |
-| GRASP_2OPT           | grasp            | 2-opt          | Restart diversificado    |
+**Perturbações leves** (0-7):
+| Ação | Perturbação | Busca Local |
+|------|-------------|-------------|
+| 0-3 | two_swap | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
+| 4-7 | segment_reverse | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
 
-**Tipos de perturbação:**
-- **Leves** (`two_swap`, `segment_reverse`): modificam levemente a solução atual
-- **Destrutivas** (`random`, `nearest`, `cheapest`, `grasp`): ignoram a solução atual e constroem uma nova do zero
+**Perturbações destrutivas** (8-20):
+| Ação | Perturbação | Busca Local |
+|------|-------------|-------------|
+| 8-10 | random | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+| 11-14 | nearest | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
+| 15-17 | cheapest | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+| 18-20 | grasp | 2-opt_full, 2-opt_nn, 2-opt_dlb |
 
-**Buscas locais:**
-- **2-opt**: O(n²), rápido e eficiente
-- **Lin-Kernighan**: Cadeias de 2-opt (depth=2), mais intensivo
+O agente aprende qual variante de 2-opt usar em cada situação. Operadores lentos são naturalmente penalizados pelo desconto temporal.
 
 ## Estrutura do Projeto
 
 ```
 TSP-RL/
-├── src/                         # Código fonte principal
-│   ├── tsp/                     # Componentes core do TSP
-│   │   ├── solution.py          # Representação de soluções
-│   │   ├── instance.py          # TSPInstance, TSPDataset
-│   │   ├── local_search.py      # two_opt(), lin_kernighan() + LOCAL_SEARCHES
-│   │   ├── perturbation.py      # two_swap(), segment_reverse() + PERTURBATIONS
-│   │   └── constructive.py      # random_tour(), nearest_neighbor(), cheapest_insertion(), grasp() + CONSTRUCTIVES
-│   ├── ils/                     # Framework ILS
-│   │   └── q_ils.py             # QILS, State, Action, N_STATES, N_ACTIONS
-│   └── rl/                      # Reinforcement Learning
-│       ├── q_table.py           # Classe QTable
-│       ├── q_learning.py        # Q-Learning (value iteration)
-│       ├── mdp.py               # Construção do MDP
-│       └── transition.py        # Carga de transições
+├── src/
+│   ├── tsp/                      # Core TSP
+│   │   ├── solution.py           # Representação de soluções
+│   │   ├── instance.py           # TSPInstance, TSPDataset
+│   │   ├── local_search.py       # two_opt_full, two_opt_nn, two_opt_dlb, lin_kernighan
+│   │   ├── perturbation.py       # two_swap, segment_reverse
+│   │   └── constructive.py       # random, nearest, cheapest, grasp
+│   └── rl/
+│       └── dqn/                  # Deep Q-Network
+│           ├── state.py          # DQNState, normalize_gap
+│           ├── network.py        # QNetwork (MLP)
+│           ├── buffer.py         # ReplayBuffer
+│           ├── env.py            # DQNEnv, ACTION_DECODE, N_ACTIONS
+│           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
-│   ├── generate_splits.py       # Gera splits train/test
-│   ├── train_transitions.py     # Geração de transições (paralelo)
-│   ├── train_qtable.py          # Treinamento de Q-tables
-│   ├── evaluate.py              # Avaliação com Q-table treinada
-│   ├── clear.sh                 # Remove arquivos gerados
-│   └── exemplos.sh              # Pipeline de exemplo (subconjunto pequeno)
-├── utils/
-│   └── plot.py                  # Visualizações (convergência, heatmap, violin plots)
+│   ├── train_dqn.py              # Treinamento DQN
+│   ├── generate_splits.py        # Gera splits train/test
+│   └── clear.sh                  # Remove arquivos gerados
+├── models/
+│   └── dqn/                      # Modelos treinados (.pt)
 ├── data/
-│   ├── EUC_2D.json              # Instâncias euclidianas
-│   ├── ATT.json                 # Instâncias ATT
-│   ├── GEO.json                 # Instâncias geográficas
-│   ├── splits.json              # Divisão treino/teste (gerado)
-│   ├── train/                   # Dados de transição (gerado)
-│   ├── q_tables/                # Q-tables treinadas (gerado)
-│   ├── plots/                   # Gráficos de treinamento (gerado)
-│   └── results/                 # Resultados de avaliação (gerado)
-└── etc/
-    ├── plantuml/                # Diagramas do framework
-    └── slides/                  # Apresentação
+│   ├── {EUC_2D,ATT,GEO}.json     # Instâncias (11110 por tipo)
+│   └── splits.json               # Split 90/10 (seed=42)
+└── tests/
 ```
 
 ## Quickstart
 
-Para rodar o pipeline completo em um subconjunto pequeno (tipos EUC_2D/ATT/GEO, tamanhos 10/20, 100 instâncias por par):
+### Treinar um modelo DQN
 
 ```bash
-./scripts/exemplos.sh
+# Gerar splits (se necessário)
+python scripts/generate_splits.py --seed 42
+
+# Treinar para EUC_2D, tamanho 50, 2000 episódios
+python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000
+
+# Treinar múltiplos tamanhos
+python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
 ```
 
-Para limpar todos os arquivos gerados:
+### Limpar arquivos gerados
 
 ```bash
-./scripts/clear.sh          # dry-run (mostra o que seria deletado)
-./scripts/clear.sh --force  # deleta de fato
+./scripts/clear.sh          # dry-run
+./scripts/clear.sh --force  # deleta
 ```
 
-### Paralelismo
+## Uso Programático
 
-Os scripts `train_transitions.py` e `evaluate.py` usam por padrão `cpu_count - 2` workers. Para sobrescrever:
-
-```bash
-python scripts/train_transitions.py ... --workers 8
-python scripts/evaluate.py ... --workers 8
-```
-
-## Fluxo de Execução
-
-### 1. Geração de Transições (offline)
-
-Executa ILS com escolhas aleatórias de (perturbação, busca local), registrando tuplas `(s, a, r, s')`:
-
-```bash
-python scripts/train_transitions.py --help
-python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/EUC_2D.json --output_dir data/train/EUC_2D --limit 3333
-python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/ATT.json --output_dir data/train/ATT --limit 3333
-python scripts/train_transitions.py --split_path data/splits.json --dataset_path data/GEO.json --output_dir data/train/GEO --limit 3333
-```
-
-### 2. Treinamento da Q-table
-
-Constrói o MDP a partir das transições e treina via Q-Learning:
-
-```bash
-python scripts/train_qtable.py --help
-python scripts/train_qtable.py --types EUC_2D ATT GEO --sizes 10 20 30
-```
-
-### 3. Avaliação
-
-Executa o ILS guiado pela Q-table em instâncias de teste:
-
-```bash
-python scripts/evaluate.py --help
-python scripts/evaluate.py --types EUC_2D ATT GEO --sizes 10 20 30 --workers 16
-```
-
-Ao final da avaliação, são gerados automaticamente **violin plots** mostrando a distribuição dos gaps por tamanho de instância (um gráfico por tipo). Use `--no-plots` para desabilitar.
-
-## Componentes
-
-Os operadores são funções standalone com registros `Dict[str, Callable]` para acesso dinâmico:
-
-### Heurísticas Construtivas (`CONSTRUCTIVES`)
-
-- **random**: tour aleatório
-- **nearest**: adiciona sempre a cidade mais próxima
-- **cheapest**: insere na posição de menor aumento de custo
-- **grasp**: GRASP (seleciona de uma lista restrita de candidatos "bons o suficiente")
-
-### Buscas Locais (`LOCAL_SEARCHES`)
-
-- **two_opt**: troca 2 arestas; usa seleção adaptativa por padrão
-- **lin_kernighan**: cadeias de 2-opt com profundidade limitada (depth=2)
-
-#### Seleção Adaptativa do 2-opt
-
-O `two_opt` no registry usa seleção adaptativa que escolhe automaticamente a melhor variante baseado no tamanho da instância:
-
-| Tamanho (n) | Variante interna | Complexidade | Motivo |
-|-------------|------------------|--------------|--------|
-| n < 40      | `two_opt_full`   | O(n²)        | Overhead de neighbor lists não compensa |
-| 40 ≤ n < 80 | `two_opt_nn`     | O(n·k)       | Bom equilíbrio qualidade/velocidade |
-| n ≥ 80      | `two_opt_dlb`    | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
-
-O parâmetro `k` (número de vizinhos) aceita:
-- **int**: usado diretamente (ex: `k=20` = 20 vizinhos)
-- **float em (0,1)**: interpretado como proporção de n (ex: `k=0.5` = 50% das cidades)
-
-Padrão: `k=0.5` (50% das cidades como vizinhos).
-
-As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão disponíveis via import direto se necessário.
-
-### Perturbações (`PERTURBATIONS`)
-
-- **two_swap**: troca dois vértices aleatórios
-- **segment_reverse**: reverte um segmento aleatório do tour
-
-## Uso Básico
+### Treinamento
 
 ```python
-from src import QILS, TSPInstance
+from src import TSPDataset, DQNConfig, train_dqn, evaluate_dqn
 
-# Carregar instância
-problem = TSPInstance("data/EUC_2D.json", instance_id=123)
+# Carregar instâncias de treino
+dataset = TSPDataset("data/EUC_2D.json", instance_ids=range(1000))
+instances = list(dataset)
 
-# Calcular custo ótimo
-opt_tour = problem.opt_tour
-opt_cost = sum(
-    problem.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)])
-    for i in range(len(opt_tour))
+# Configurar e treinar
+config = DQNConfig(
+    time_budget=10.0,      # segundos (escala com n²)
+    n_episodes=2000,
+    gamma=0.99,
+    lr=0.001,
+    hidden_dim=64,
 )
 
-# Criar solver e carregar Q-table
-solver = QILS(problem)
-solver.load_q_table("data/q_tables/EUC_2D/instance_size_50.txt")
-
-# Executar
-best_solution = solver.run(max_iter=50, opt_cost=opt_cost, epsilon=0.1)
-
-print(f"Custo: {best_solution.cost}")
-print(f"Gap: {((best_solution.cost - opt_cost) / opt_cost) * 100:.2f}%")
+model, stats = train_dqn(instances, config)
+print(f"Gap médio final: {np.mean(stats.episode_best_gaps[-100:]):.2f}%")
 ```
 
-### Usando os Registros Diretamente
+### Avaliação
 
 ```python
-from src import LOCAL_SEARCHES, PERTURBATIONS, CONSTRUCTIVES, N_STATES, N_ACTIONS
+from src import TSPDataset, load_model, evaluate_dqn, DQNConfig, N_ACTIONS
 
-# Número de operadores disponíveis
-print(f"Buscas locais: {len(LOCAL_SEARCHES)}")      # 2
-print(f"Perturbações: {len(PERTURBATIONS)}")        # 2
-print(f"Construtivas: {len(CONSTRUCTIVES)}")        # 4
-print(f"Estados: {N_STATES}, Ações: {N_ACTIONS}")   # 5, 9
+# Carregar modelo treinado
+state_dim = 3 + 2 * N_ACTIONS  # 45 com history_len=2
+model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=state_dim)
 
-# Chamar operadores pelo nome
-from src import Solution
-tour, cost = CONSTRUCTIVES["nearest"](problem)
-solution = Solution(tour, dist_matrix, is_closed=True)
-improved = LOCAL_SEARCHES["two_opt"](solution)  # usa seleção adaptativa por padrão
+# Avaliar em instâncias de teste
+test_instances = list(TSPDataset("data/EUC_2D.json", instance_ids=range(1000, 1111)))
+config = DQNConfig(time_budget=10.0)
+
+gaps = evaluate_dqn(model, test_instances, config)
+print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")
+```
+
+### Ambiente (para experimentos)
+
+```python
+from src import TSPInstance, DQNEnv, N_ACTIONS
+
+instance = TSPInstance("data/EUC_2D.json", instance_id=0)
+env = DQNEnv(instance, time_budget=5.0, history_len=2)
+
+state = env.reset()
+print(f"State dim: {env.state_dim}")  # 45
+print(f"N_ACTIONS: {N_ACTIONS}")      # 21
+
+while True:
+    action = 0  # ou política aprendida
+    next_state, reward, done = env.step(action)
+    if done:
+        break
+
+print(f"Best gap: {env.best_gap:.2f}%")
 ```
 
 ## Hiperparâmetros
 
-Os hiperparâmetros do framework são configurados em diferentes fases do pipeline:
+### DQN (`train_dqn.py`)
 
-| Símbolo | Flag | Script | Fase | Default | Descrição |
-|---------|------|--------|------|---------|-----------|
-| β | `--beta` | `train_transitions.py` | Geração de transições | 0.0 | Peso do desconto temporal nas recompensas |
-| γ | `--gamma` | `train_qtable.py` | Treinamento Q-table | 0.99 | Discount factor (peso de recompensas futuras) |
-| ε | `--epsilon` | `evaluate.py` | Avaliação/Execução | 0.0 | Taxa de exploração (ε-greedy) |
+| Parâmetro | Flag | Default | Descrição |
+|-----------|------|---------|-----------|
+| Time budget | `--time_budget` | 10.0 | Budget base em segundos (escala com n²) |
+| Episódios | `--episodes` | 2000 | Número de episódios de treino |
+| γ (gamma) | `--gamma` | 0.99 | Discount factor |
+| Learning rate | `--lr` | 0.001 | Taxa de aprendizado |
+| Hidden dim | `--hidden_dim` | 64 | Neurônios por camada oculta |
 
-**Desconto temporal (β):** penaliza operadores mais lentos. O tempo é normalizado por O(n²) para consistência entre tamanhos:
-- Fórmula: `reward -= β * (tempo / t_ref)`, onde `t_ref = (n/100)²`
-- Referência: β=0.01 desconta ~1% da recompensa por segundo normalizado em n=100
-- Com `β = 0` (default), não há penalidade temporal
+### Configuração completa (`DQNConfig`)
 
-## Split de Dados
+```python
+@dataclass
+class DQNConfig:
+    # Ambiente
+    time_budget: float = 10.0   # T(n) = (n/100)² × time_budget
+    history_len: int = 2        # Ações no histórico
 
-O split train/test usa seed=42 para reprodutibilidade e compatibilidade com outros grupos:
+    # DQN
+    gamma: float = 0.99
+    lr: float = 0.001
+    batch_size: int = 64
+    buffer_size: int = 50000
+    target_update_freq: int = 50
 
-```bash
-python scripts/generate_splits.py --seed 42 --train_ratio 0.9
+    # Exploração
+    epsilon_start: float = 1.0
+    epsilon_end: float = 0.05
+    epsilon_decay: float = 0.995
+
+    # Treinamento
+    n_episodes: int = 2000
+    updates_per_episode: int = 5
 ```
 
-Resultado: 90% treino, 10% teste (1111 instâncias de teste por tipo).
+## Arquitetura da Rede
+
+```
+QNetwork: state (45) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
+```
+
+- Input: estado contínuo (45 dims com history_len=2 e 21 ações)
+- Output: Q-values para cada uma das 21 ações
+- ~6K parâmetros
+
+## Operadores TSP
+
+### Buscas Locais (4 variantes)
+
+| Variante | Complexidade | Descrição |
+|----------|--------------|-----------|
+| `two_opt_full` | O(n²) | Melhor qualidade, mais lento |
+| `two_opt_nn` | O(n·k) | Neighbor lists, bom equilíbrio |
+| `two_opt_dlb` | O(n·k) | Don't look bits, mais rápido |
+| `lin_kernighan` | Variável | Cadeias de 2-opt com depth=2 |
+
+O parâmetro `k` (número de vizinhos) para `two_opt_nn` e `two_opt_dlb`:
+- **int**: usado diretamente (ex: `k=20`)
+- **float em (0,1)**: proporção de n (ex: `k=0.5` = 50% das cidades)
+- **Default**: `k=0.5`
+
+### Perturbações Leves
+
+- **two_swap**: Troca 2 vértices aleatórios
+- **segment_reverse**: Reverte segmento aleatório do tour
+
+### Construtivas (perturbações destrutivas)
+
+- **random**: Tour aleatório
+- **nearest**: Vizinho mais próximo
+- **cheapest**: Inserção mais barata
+- **grasp**: GRASP com RCL (α=0.2)
+
+## Dados
+
+- **3 tipos**: EUC_2D, ATT, GEO
+- **10 tamanhos**: 10, 20, ..., 100 nós
+- **11.110 instâncias por tipo** (1.111 por tamanho)
+- **Split**: 90% treino, 10% teste (seed=42)
 
 ## Referências
 
-- Lourenço, H. R., Martin, O. C., & Stützle, T. (2003). *Iterated Local Search*. Handbook of Metaheuristics.
-- Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction*. MIT Press.
-- Bengio, Y., Lodi, A., & Prouvost, A. (2020). *Machine Learning for Combinatorial Optimization*. arXiv:1811.06128.
+- Mnih et al. (2015). *Human-level control through deep reinforcement learning*. Nature.
+- Lourenço et al. (2003). *Iterated Local Search*. Handbook of Metaheuristics.
+- Bengio et al. (2020). *Machine Learning for Combinatorial Optimization*. arXiv:1811.06128.
