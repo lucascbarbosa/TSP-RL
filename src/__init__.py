@@ -8,6 +8,7 @@ from src.tsp.constructive import CONSTRUCTIVES, random_tour, nearest_neighbor, c
 from src.ils.q_ils import QILS, State, Action, N_STATES, N_ACTIONS, RunStats
 from src.rl.q_table import QTable
 from src.rl.mdp import MDP
+from src.rl.dqn import DQNConfig, DQNEnv, QNetwork, train_dqn, evaluate_dqn
 
 __all__ = [
     # TSP core
@@ -37,4 +38,10 @@ __all__ = [
     # RL
     "QTable",
     "MDP",
+    # DQN
+    "DQNConfig",
+    "DQNEnv",
+    "QNetwork",
+    "train_dqn",
+    "evaluate_dqn",
 ]
