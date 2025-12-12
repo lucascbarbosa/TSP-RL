@@ -12,7 +12,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 from numpy.typing import NDArray
 
 
@@ -27,20 +26,6 @@ COLORS = {
     "tertiary": "#F18F01",
     "quaternary": "#C73E1D",
 }
-
-# State and action labels for Q-table visualization
-STATE_LABELS = ["EXCELLENT", "GOOD", "REGULAR", "POOR", "BETTER"]
-ACTION_LABELS = [
-    "swap+2opt",
-    "swap+LK",
-    "rev+2opt",
-    "rev+LK",
-    "rand+2opt",
-    "near+2opt",
-    "cheap+2opt",
-    "near+LK",
-    "grasp+2opt",
-]
 
 
 def setup_style() -> None:
@@ -200,7 +185,7 @@ def generate_gap_violin_plots(
         plot_path = type_dir / f"{instance_type}_gap_violins.png"
         plot_gap_violins_by_size(
             gaps_by_size,
-            title=f"Q-ILS Gap Distribution ({instance_type})",
+            title=f"DQN-ILS Gap Distribution ({instance_type})",
             save_path=plot_path,
         )
         generated_files.append(str(plot_path))
@@ -211,35 +196,47 @@ def generate_gap_violin_plots(
 
 
 # =============================================================================
-# Q-Learning Plots
+# DQN Training Plots
 # =============================================================================
 
 
-def plot_q_convergence(
-    history: dict[str, list[float]],
+def plot_learning_curve(
+    episode_gaps: List[float],
+    window: int = 100,
     title: Optional[str] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot Q-Learning convergence curve.
+    Plot DQN learning curve showing gap evolution during training.
+
+    Shows raw episode gaps with a smoothed moving average overlay.
 
     Args:
-        history: Dictionary with 'avg_q_value' list.
-        title: Plot title (auto-generated if None).
+        episode_gaps: List of best gaps per episode.
+        window: Moving average window size (default: 100).
+        title: Plot title.
         save_path: Path to save figure (displays if None).
     """
-    avg_q = history["avg_q_value"]
-    iterations = range(1, len(avg_q) + 1)
+    episodes = np.arange(1, len(episode_gaps) + 1)
+    gaps = np.array(episode_gaps)
 
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
-    ax.plot(iterations, avg_q, color=COLORS["primary"], linewidth=1.5)
-    ax.fill_between(iterations, avg_q, alpha=0.15, color=COLORS["primary"])
+    # Raw data (light, in background)
+    ax.plot(episodes, gaps, color=COLORS["primary"], alpha=0.2, linewidth=0.8, label="Per episode")
 
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Mean Q-value")
-    ax.set_xlim(0, len(avg_q))
+    # Moving average
+    if len(gaps) >= window:
+        ma = np.convolve(gaps, np.ones(window) / window, mode="valid")
+        ma_episodes = episodes[window - 1 :]
+        ax.plot(ma_episodes, ma, color=COLORS["primary"], linewidth=2, label=f"Moving avg ({window} ep)")
+
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Best Gap (%)")
+    ax.set_xlim(0, len(episodes))
     ax.set_ylim(bottom=0)
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    ax.legend(loc="upper right", framealpha=0.9)
 
     if title:
         ax.set_title(title)
@@ -254,64 +251,129 @@ def plot_q_convergence(
         plt.close()
 
 
-def plot_q_heatmap(
-    matrix: NDArray[np.float64],
+def plot_action_distribution(
+    action_counts: Dict[int, int],
+    action_labels: Optional[Dict[int, str]] = None,
     title: Optional[str] = None,
-    state_labels: Optional[List[str]] = None,
-    action_labels: Optional[List[str]] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot Q-table as annotated heatmap.
+    Plot distribution of actions chosen by the DQN agent.
 
     Args:
-        matrix: Q-table array (states x actions).
+        action_counts: Dictionary mapping action index to count.
+        action_labels: Optional dictionary mapping action index to label.
+                       If None, uses "Action {i}" format.
         title: Plot title.
-        state_labels: Labels for states (y-axis).
-        action_labels: Labels for actions (x-axis).
         save_path: Path to save figure (displays if None).
     """
-    state_labels = state_labels or STATE_LABELS[: matrix.shape[0]]
-    action_labels = action_labels or ACTION_LABELS[: matrix.shape[1]]
+    actions = sorted(action_counts.keys())
+    counts = [action_counts[a] for a in actions]
+    total = sum(counts)
+    percentages = [100 * c / total for c in counts]
 
-    # Mask zeros for better visualization
-    matrix_display = matrix.copy()
-    mask = matrix_display == 0
+    # Generate labels
+    if action_labels:
+        labels = [action_labels.get(a, f"A{a}") for a in actions]
+    else:
+        labels = [f"A{a}" for a in actions]
 
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-    sns.heatmap(
-        matrix_display,
-        annot=True,
-        fmt=".1f",
-        cmap="YlOrRd",
-        mask=mask,
-        cbar_kws={"label": "Q-value"},
-        xticklabels=action_labels,
-        yticklabels=state_labels,
-        linewidths=0.5,
-        linecolor="white",
-        ax=ax,
-    )
+    bars = ax.bar(range(len(actions)), percentages, color=COLORS["primary"], alpha=0.7, edgecolor="white")
 
-    # Show zeros in gray
-    for i in range(matrix.shape[0]):
-        for j in range(matrix.shape[1]):
-            if mask[i, j]:
-                ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=True, color="#E0E0E0"))
-                ax.text(
-                    j + 0.5,
-                    i + 0.5,
-                    "0",
-                    ha="center",
-                    va="center",
-                    fontsize=9,
-                    color="#888888",
-                )
+    # Highlight top 3 actions
+    top_indices = np.argsort(percentages)[-3:]
+    for idx in top_indices:
+        bars[idx].set_color(COLORS["secondary"])
+        bars[idx].set_alpha(0.9)
 
+    ax.set_xticks(range(len(actions)))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
     ax.set_xlabel("Action")
-    ax.set_ylabel("State")
-    ax.set_xticklabels(action_labels, rotation=45, ha="right")
+    ax.set_ylabel("Frequency (%)")
+
+    # Add percentage labels on top of bars
+    for i, (bar, pct) in enumerate(zip(bars, percentages)):
+        if pct > 2:  # Only label bars with >2%
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.5,
+                f"{pct:.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_q_values_heatmap(
+    q_matrix: NDArray[np.float64],
+    gap_labels: Optional[List[str]] = None,
+    action_labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot Q-values as a heatmap over discretized gap levels.
+
+    Creates a 2D visualization analogous to Q-table heatmaps.
+    Y-axis shows gap levels, X-axis shows actions, color indicates Q-values.
+
+    Args:
+        q_matrix: Matrix of shape (n_gaps, n_actions) with Q-values.
+                  Use compute_q_matrix() from src.rl.dqn to generate this.
+        gap_labels: Labels for Y-axis (default: ["0%", "1%", ...]).
+        action_labels: Labels for X-axis (default: ["A0", "A1", ...]).
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+
+    Example:
+        >>> from src.rl.dqn import compute_q_matrix, load_model, N_ACTIONS
+        >>> model = load_model("model.pt", state_dim=45)
+        >>> q_matrix = compute_q_matrix(model)
+        >>> plot_q_values_heatmap(q_matrix, title="Learned Q-values")
+    """
+    n_gaps, n_actions = q_matrix.shape
+
+    # Default labels
+    if gap_labels is None:
+        default_gaps = [0, 1, 2, 5, 10, 20, 50]
+        gap_labels = [f"{g}%" for g in default_gaps[:n_gaps]]
+    if action_labels is None:
+        action_labels = [f"A{i}" for i in range(n_actions)]
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    im = ax.imshow(q_matrix, aspect="auto", cmap="YlOrRd")
+
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Q-value", rotation=270, labelpad=15)
+
+    # Axis labels
+    ax.set_xticks(range(n_actions))
+    ax.set_xticklabels(action_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks(range(n_gaps))
+    ax.set_yticklabels(gap_labels)
+    ax.set_xlabel("Action")
+    ax.set_ylabel("Gap Level")
+
+    # Highlight best action per gap level with border
+    for i in range(n_gaps):
+        best_action = int(np.argmax(q_matrix[i, :]))
+        ax.add_patch(plt.Rectangle((best_action - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="black", linewidth=2))
 
     if title:
         ax.set_title(title)
@@ -953,7 +1015,7 @@ def generate_time_analysis_plots(
         gap_time_path = type_dir / f"{instance_type}_gap_time_violins.png"
         plot_gap_and_time_violins(
             results_by_size,
-            title=f"Q-ILS Performance ({instance_type})",
+            title=f"DQN-ILS Performance ({instance_type})",
             save_path=gap_time_path,
         )
         generated_files.append(str(gap_time_path))

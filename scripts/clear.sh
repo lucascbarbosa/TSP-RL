@@ -26,11 +26,10 @@ echo ""
 
 # Files/directories to clean
 TARGETS=(
-    "data/results"           # evaluate.py output
     "data/splits.json"       # generate_splits.py output
-    "data/q_tables"          # train_qtable.py output
-    "data/plots"             # train_qtable.py output
-    "data/train"             # train_transitions.py output
+    "data/results"           # Evaluation CSVs
+    "data/plots"             # Generated plots
+    "models/dqn"             # Trained DQN models
 )
 
 # Check for --force flag

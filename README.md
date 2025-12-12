@@ -12,7 +12,7 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 ├─────────────────────────────────────────────────────────────┤
 │  1. Observar estado s = (g, g_best, t_ratio, history)       │
 │  2. Consultar rede Q: a = argmax Q(s, a; θ)                 │
-│  3. Decodificar ação: a → (perturbação, busca local)        │
+│  3. Decodificar ação: a -> (perturbação, busca local)       │
 │  4. Aplicar perturbação + busca local                       │
 │  5. Calcular recompensa: r = Δg_best (melhoria no recorde)  │
 │  6. Repetir até esgotar time budget T                       │
@@ -85,7 +85,9 @@ TSP-RL/
 │           ├── env.py            # DQNEnv, ACTION_DECODE, N_ACTIONS
 │           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
+│   ├── pipeline.sh               # Pipeline completo (train + eval)
 │   ├── train_dqn.py              # Treinamento DQN
+│   ├── evaluate_dqn.py           # Avaliação de modelos treinados
 │   ├── generate_splits.py        # Gera splits train/test
 │   └── clear.sh                  # Remove arquivos gerados
 ├── models/
@@ -98,6 +100,19 @@ TSP-RL/
 
 ## Quickstart
 
+### Pipeline completo (recomendado)
+
+```bash
+# Executa splits -> treino -> avaliação com defaults para teste rápido
+./scripts/pipeline.sh
+
+# Customizar tipos e tamanhos
+./scripts/pipeline.sh --types "EUC_2D ATT" --sizes "10 20 30"
+
+# Ver todas as opções
+./scripts/pipeline.sh --help
+```
+
 ### Treinar um modelo DQN
 
 ```bash
@@ -109,6 +124,19 @@ python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000
 
 # Treinar múltiplos tamanhos
 python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
+```
+
+### Avaliar modelo treinado
+
+```bash
+# Avaliar um modelo específico
+python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt
+
+# Avaliar com comparação de baseline (GRASP+2opt, 5 restarts)
+python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --baseline
+
+# Avaliar todos os modelos de um tipo
+python scripts/evaluate_dqn.py --model "models/dqn/EUC_2D_*.pt"
 ```
 
 ### Limpar arquivos gerados
@@ -198,7 +226,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 @dataclass
 class DQNConfig:
     # Ambiente
-    time_budget: float = 10.0   # T(n) = (n/100)² × time_budget
+    time_budget: float = 10.0   # T(n) = (n/100)² * time_budget
     history_len: int = 2        # Ações no histórico
 
     # DQN
@@ -221,7 +249,7 @@ class DQNConfig:
 ## Arquitetura da Rede
 
 ```
-QNetwork: state (45) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
+QNetwork: state (45) -> Linear(64) -> ReLU -> Linear(64) -> ReLU -> Linear(21)
 ```
 
 - Input: estado contínuo (45 dims com history_len=2 e 21 ações)
