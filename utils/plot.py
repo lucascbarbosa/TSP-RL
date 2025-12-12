@@ -12,7 +12,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 from numpy.typing import NDArray
 
 
@@ -27,20 +26,6 @@ COLORS = {
     "tertiary": "#F18F01",
     "quaternary": "#C73E1D",
 }
-
-# State and action labels for Q-table visualization
-STATE_LABELS = ["EXCELLENT", "GOOD", "REGULAR", "POOR", "BETTER"]
-ACTION_LABELS = [
-    "swap+2opt",
-    "swap+LK",
-    "rev+2opt",
-    "rev+LK",
-    "rand+2opt",
-    "near+2opt",
-    "cheap+2opt",
-    "near+LK",
-    "grasp+2opt",
-]
 
 
 def setup_style() -> None:
@@ -200,7 +185,7 @@ def generate_gap_violin_plots(
         plot_path = type_dir / f"{instance_type}_gap_violins.png"
         plot_gap_violins_by_size(
             gaps_by_size,
-            title=f"Q-ILS Gap Distribution ({instance_type})",
+            title=f"DQN-ILS Gap Distribution ({instance_type})",
             save_path=plot_path,
         )
         generated_files.append(str(plot_path))
@@ -208,122 +193,6 @@ def generate_gap_violin_plots(
         print(f"  Generated: {plot_path}")
 
     return generated_files
-
-
-# =============================================================================
-# Q-Learning Plots
-# =============================================================================
-
-
-def plot_q_convergence(
-    history: dict[str, list[float]],
-    title: Optional[str] = None,
-    save_path: Optional[Union[str, Path]] = None,
-) -> None:
-    """
-    Plot Q-Learning convergence curve.
-
-    Args:
-        history: Dictionary with 'avg_q_value' list.
-        title: Plot title (auto-generated if None).
-        save_path: Path to save figure (displays if None).
-    """
-    avg_q = history["avg_q_value"]
-    iterations = range(1, len(avg_q) + 1)
-
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-
-    ax.plot(iterations, avg_q, color=COLORS["primary"], linewidth=1.5)
-    ax.fill_between(iterations, avg_q, alpha=0.15, color=COLORS["primary"])
-
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Mean Q-value")
-    ax.set_xlim(0, len(avg_q))
-    ax.set_ylim(bottom=0)
-
-    if title:
-        ax.set_title(title)
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path)
-        plt.close()
-    else:
-        plt.show()
-        plt.close()
-
-
-def plot_q_heatmap(
-    matrix: NDArray[np.float64],
-    title: Optional[str] = None,
-    state_labels: Optional[List[str]] = None,
-    action_labels: Optional[List[str]] = None,
-    save_path: Optional[Union[str, Path]] = None,
-) -> None:
-    """
-    Plot Q-table as annotated heatmap.
-
-    Args:
-        matrix: Q-table array (states x actions).
-        title: Plot title.
-        state_labels: Labels for states (y-axis).
-        action_labels: Labels for actions (x-axis).
-        save_path: Path to save figure (displays if None).
-    """
-    state_labels = state_labels or STATE_LABELS[: matrix.shape[0]]
-    action_labels = action_labels or ACTION_LABELS[: matrix.shape[1]]
-
-    # Mask zeros for better visualization
-    matrix_display = matrix.copy()
-    mask = matrix_display == 0
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-
-    sns.heatmap(
-        matrix_display,
-        annot=True,
-        fmt=".1f",
-        cmap="YlOrRd",
-        mask=mask,
-        cbar_kws={"label": "Q-value"},
-        xticklabels=action_labels,
-        yticklabels=state_labels,
-        linewidths=0.5,
-        linecolor="white",
-        ax=ax,
-    )
-
-    # Show zeros in gray
-    for i in range(matrix.shape[0]):
-        for j in range(matrix.shape[1]):
-            if mask[i, j]:
-                ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=True, color="#E0E0E0"))
-                ax.text(
-                    j + 0.5,
-                    i + 0.5,
-                    "0",
-                    ha="center",
-                    va="center",
-                    fontsize=9,
-                    color="#888888",
-                )
-
-    ax.set_xlabel("Action")
-    ax.set_ylabel("State")
-    ax.set_xticklabels(action_labels, rotation=45, ha="right")
-
-    if title:
-        ax.set_title(title)
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path)
-        plt.close()
-    else:
-        plt.show()
-        plt.close()
 
 
 # =============================================================================
@@ -953,7 +822,7 @@ def generate_time_analysis_plots(
         gap_time_path = type_dir / f"{instance_type}_gap_time_violins.png"
         plot_gap_and_time_violins(
             results_by_size,
-            title=f"Q-ILS Performance ({instance_type})",
+            title=f"DQN-ILS Performance ({instance_type})",
             save_path=gap_time_path,
         )
         generated_files.append(str(gap_time_path))
