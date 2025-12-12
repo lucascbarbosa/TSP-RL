@@ -1,14 +1,40 @@
-"""TSP-RL: Q-Learning guided Iterated Local Search for TSP."""
+"""TSP-RL: DQN-guided Iterated Local Search for TSP."""
 
 from src.tsp.solution import Solution
 from src.tsp.instance import TSPInstance, TSPDataset
-from src.tsp.local_search import LOCAL_SEARCHES, two_opt, lin_kernighan
+from src.tsp.local_search import (
+    LOCAL_SEARCHES,
+    two_opt,
+    two_opt_full,
+    two_opt_nn,
+    two_opt_dlb,
+    lin_kernighan,
+)
 from src.tsp.perturbation import PERTURBATIONS, two_swap, segment_reverse
 from src.tsp.constructive import CONSTRUCTIVES, random_tour, nearest_neighbor, cheapest_insertion
-from src.ils.q_ils import QILS, State, Action, N_STATES, N_ACTIONS, RunStats
-from src.rl.q_table import QTable
-from src.rl.mdp import MDP
-from src.rl.dqn import DQNConfig, DQNEnv, QNetwork, train_dqn, evaluate_dqn
+from src.rl.dqn import (
+    # Actions
+    N_ACTIONS,
+    ACTION_DECODE,
+    # State
+    DQNState,
+    normalize_gap,
+    compute_delta_reward,
+    # Network
+    QNetwork,
+    # Buffer
+    ReplayBuffer,
+    # Environment
+    DQNEnv,
+    # Trainer
+    DQNConfig,
+    TrainingStats,
+    train_dqn,
+    evaluate_dqn,
+    compute_time_budget,
+    save_model,
+    load_model,
+)
 
 __all__ = [
     # TSP core
@@ -18,6 +44,9 @@ __all__ = [
     # Local search
     "LOCAL_SEARCHES",
     "two_opt",
+    "two_opt_full",
+    "two_opt_nn",
+    "two_opt_dlb",
     "lin_kernighan",
     # Perturbations
     "PERTURBATIONS",
@@ -28,20 +57,25 @@ __all__ = [
     "random_tour",
     "nearest_neighbor",
     "cheapest_insertion",
-    # ILS
-    "QILS",
-    "State",
-    "Action",
-    "N_STATES",
+    # DQN Actions
     "N_ACTIONS",
-    "RunStats",
-    # RL
-    "QTable",
-    "MDP",
-    # DQN
-    "DQNConfig",
-    "DQNEnv",
+    "ACTION_DECODE",
+    # DQN State
+    "DQNState",
+    "normalize_gap",
+    "compute_delta_reward",
+    # DQN Network
     "QNetwork",
+    # DQN Buffer
+    "ReplayBuffer",
+    # DQN Environment
+    "DQNEnv",
+    # DQN Trainer
+    "DQNConfig",
+    "TrainingStats",
     "train_dqn",
     "evaluate_dqn",
+    "compute_time_budget",
+    "save_model",
+    "load_model",
 ]

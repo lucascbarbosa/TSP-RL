@@ -12,7 +12,7 @@ from src.tsp.instance import TSPInstance
 from src.tsp.local_search import two_opt, lin_kernighan
 from src.tsp.perturbation import two_swap, segment_reverse
 from src.tsp.constructive import random_tour, nearest_neighbor, cheapest_insertion
-from src.ils.q_ils import QILS, State
+from src.rl.dqn import DQNEnv, N_ACTIONS, ACTION_DECODE
 
 
 @pytest.fixture
@@ -46,44 +46,32 @@ class TestTSPInstanceIntegration:
         assert instance.opt_tour == [1, 2, 3, 4]
 
 
-class TestQILSIntegration:
-    """Tests for QILS integration."""
+class TestDQNEnvIntegration:
+    """Tests for DQNEnv integration."""
 
-    def test_qils_reuses_dist_matrix(self, temp_instance_file):
-        """QILS should reuse instance's precomputed distance matrix."""
+    def test_env_creation(self, temp_instance_file):
+        """DQNEnv should initialize correctly."""
         instance = TSPInstance(temp_instance_file, instance_id=0)
-        qils = QILS(instance)
-        # Should be the same object (not a copy)
-        assert qils.dist_matrix is instance.dist_matrix
+        env = DQNEnv(instance, time_budget=1.0)
+        assert env.n_actions == N_ACTIONS
+        assert env.state_dim == 3 + 3 * N_ACTIONS  # 3 + history_len * n_actions
 
-    def test_qils_get_state(self, temp_instance_file):
-        """QILS state calculation should work correctly."""
+    def test_env_reset_and_step(self, temp_instance_file):
+        """DQNEnv reset and step should work correctly."""
         instance = TSPInstance(temp_instance_file, instance_id=0)
-        qils = QILS(instance)
+        env = DQNEnv(instance, time_budget=0.5)
 
-        # Optimal cost for unit square = 4.0
-        opt_cost = 4.0
+        state = env.reset()
+        assert state.to_numpy().shape == (env.state_dim,)
 
-        # Exact optimal -> EXCELLENT, reward = 1.0 (gap=0%)
-        state, reward = qils.get_state(4.0, opt_cost)
-        assert state == State.EXCELLENT
-        assert reward == 1.0
-
-        # 1% gap -> EXCELLENT
-        state, _ = qils.get_state(4.04, opt_cost)
-        assert state == State.EXCELLENT
-
-        # 3% gap -> GOOD
-        state, _ = qils.get_state(4.12, opt_cost)
-        assert state == State.GOOD
-
-        # 7% gap -> REGULAR
-        state, _ = qils.get_state(4.28, opt_cost)
-        assert state == State.REGULAR
-
-        # 15% gap -> POOR
-        state, _ = qils.get_state(4.60, opt_cost)
-        assert state == State.POOR
+        # Take a few steps
+        for action in range(min(3, N_ACTIONS)):
+            next_state, reward, done = env.step(action)
+            assert next_state.to_numpy().shape == (env.state_dim,)
+            assert isinstance(reward, float)
+            assert isinstance(done, bool)
+            if done:
+                break
 
 
 class TestConstructiveToLocalSearch:
