@@ -51,6 +51,9 @@ class RunStats:
     action_counts: dict[str, int] = field(default_factory=dict)
     state_counts: dict[str, int] = field(default_factory=dict)
 
+    # Action history (sequence of action indices taken)
+    action_history: list[int] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         """Convert to flat dictionary for CSV export."""
         d = {
@@ -364,18 +367,25 @@ class QILS:
         verbose: bool = True,
         early_stop: bool = True,
         early_stop_target: Optional[float] = None,
+        time_budget: Optional[float] = None,
     ) -> Solution:
         """
         Run Q-ILS using the learned Q-table.
 
+        Stopping criteria (whichever comes first):
+        - max_iter iterations without improvement (if max_iter > 0)
+        - time_budget seconds elapsed (if time_budget is set)
+        - early_stop_target cost reached (if early_stop is True)
+
         Args:
-            max_iter: Maximum iterations without improvement.
+            max_iter: Maximum iterations without improvement. Set to 0 to disable.
             opt_cost: Optimal cost for state calculation and gap reporting.
             epsilon: Exploration rate for action selection.
             verbose: Print progress information.
             early_stop: Stop early when reaching target cost.
             early_stop_target: Target cost for early stop (default: opt_cost).
                 Use lower_bound when mip_gap > 0, or None to disable.
+            time_budget: Maximum runtime in seconds. None for unlimited.
 
         Returns:
             Best solution found. Access self.last_stats for detailed metrics.
@@ -411,7 +421,17 @@ class QILS:
         iteration = 0
         best_iteration = 0
 
-        while iter_without_improvement < max_iter:
+        # Loop until stopping criterion met
+        while True:
+            # Check stopping criteria
+            elapsed = time.perf_counter() - t_start
+            if time_budget is not None and elapsed >= time_budget:
+                if verbose:
+                    print(f"[Q-ILS] Time budget exhausted ({elapsed:.2f}s)")
+                break
+            if max_iter > 0 and iter_without_improvement >= max_iter:
+                break
+
             iteration += 1
 
             # Observe current state
@@ -421,6 +441,7 @@ class QILS:
             # Select action via Q-table
             action = self.choose_action(i_state, epsilon=epsilon)
             stats.action_counts[action.name] += 1
+            stats.action_history.append(action.value)
             self.last_action = action
             self.last_state = i_state
 

@@ -13,6 +13,7 @@ from src.rl.transition import (
     load_transition_folder,
     load_transition_from_paths,
 )
+from src.rl.dqn import DQNState, normalize_gap, compute_delta_reward
 
 __all__ = [
     # Q-Table
@@ -31,4 +32,8 @@ __all__ = [
     "load_transition_file",
     "load_transition_folder",
     "load_transition_from_paths",
+    # DQN components
+    "DQNState",
+    "normalize_gap",
+    "compute_delta_reward",
 ]
