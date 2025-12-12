@@ -235,20 +235,37 @@ QNetwork: state (30) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(
 
 ### Buscas Locais
 
-- **2-opt**: Seleção adaptativa baseada em n (full/nn/dlb)
+- **2-opt**: Seleção adaptativa baseada em n
 - **Lin-Kernighan**: Cadeias de 2-opt com depth=2
+
+#### 2-opt Adaptativo
+
+O `two_opt` seleciona automaticamente a variante ideal baseado no tamanho da instância:
+
+| Tamanho (n) | Variante | Complexidade | Motivo |
+|-------------|----------|--------------|--------|
+| n < 40 | `two_opt_full` | O(n²) | Overhead de neighbor lists não compensa |
+| 40 ≤ n < 80 | `two_opt_nn` | O(n·k) | Bom equilíbrio qualidade/velocidade |
+| n ≥ 80 | `two_opt_dlb` | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
+
+Parâmetro `k` (número de vizinhos):
+- **int**: usado diretamente (ex: `k=20`)
+- **float em (0,1)**: proporção de n (ex: `k=0.5` = 50% das cidades)
+- **Default**: `k=0.5`
+
+As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão disponíveis via import direto de `src.tsp.local_search`.
 
 ### Perturbações
 
-- **two_swap**: Troca 2 vértices
-- **segment_reverse**: Reverte segmento aleatório
+- **two_swap**: Troca 2 vértices aleatórios
+- **segment_reverse**: Reverte segmento aleatório do tour
 
-### Construtivas
+### Construtivas (perturbações destrutivas)
 
 - **random**: Tour aleatório
 - **nearest**: Vizinho mais próximo
 - **cheapest**: Inserção mais barata
-- **grasp**: GRASP com RCL (α=0.2)
+- **grasp**: GRASP com RCL (α=0.2, seleciona de lista restrita de candidatos "bons o suficiente")
 
 ## Dados
 
