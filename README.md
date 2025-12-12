@@ -86,6 +86,7 @@ TSP-RL/
 │           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
 │   ├── train_dqn.py              # Treinamento DQN
+│   ├── evaluate_dqn.py           # Avaliação de modelos treinados
 │   ├── generate_splits.py        # Gera splits train/test
 │   └── clear.sh                  # Remove arquivos gerados
 ├── models/
@@ -109,6 +110,19 @@ python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000
 
 # Treinar múltiplos tamanhos
 python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
+```
+
+### Avaliar modelo treinado
+
+```bash
+# Avaliar um modelo específico
+python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt
+
+# Avaliar com comparação de baseline (GRASP+2opt, 5 restarts)
+python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --baseline
+
+# Avaliar todos os modelos de um tipo
+python scripts/evaluate_dqn.py --model "models/dqn/EUC_2D_*.pt"
 ```
 
 ### Limpar arquivos gerados

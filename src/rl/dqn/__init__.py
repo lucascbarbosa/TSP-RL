@@ -1,4 +1,4 @@
-"""DQN components for Q-ILS.
+"""DQN components for DQN-ILS.
 
 This module provides Deep Q-Network components for learning
 (perturbation, local_search) selection policies.
