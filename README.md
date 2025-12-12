@@ -12,7 +12,7 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 ├─────────────────────────────────────────────────────────────┤
 │  1. Observar estado s = (g, g_best, t_ratio, history)       │
 │  2. Consultar rede Q: a = argmax Q(s, a; θ)                 │
-│  3. Decodificar ação: a → (perturbação, busca local)        │
+│  3. Decodificar ação: a -> (perturbação, busca local)       │
 │  4. Aplicar perturbação + busca local                       │
 │  5. Calcular recompensa: r = Δg_best (melhoria no recorde)  │
 │  6. Repetir até esgotar time budget T                       │
@@ -85,6 +85,7 @@ TSP-RL/
 │           ├── env.py            # DQNEnv, ACTION_DECODE, N_ACTIONS
 │           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
+│   ├── pipeline.sh               # Pipeline completo (train + eval)
 │   ├── train_dqn.py              # Treinamento DQN
 │   ├── evaluate_dqn.py           # Avaliação de modelos treinados
 │   ├── generate_splits.py        # Gera splits train/test
@@ -98,6 +99,19 @@ TSP-RL/
 ```
 
 ## Quickstart
+
+### Pipeline completo (recomendado)
+
+```bash
+# Executa splits -> treino -> avaliação com defaults para teste rápido
+./scripts/pipeline.sh
+
+# Customizar tipos e tamanhos
+./scripts/pipeline.sh --types "EUC_2D ATT" --sizes "10 20 30"
+
+# Ver todas as opções
+./scripts/pipeline.sh --help
+```
 
 ### Treinar um modelo DQN
 
@@ -212,7 +226,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 @dataclass
 class DQNConfig:
     # Ambiente
-    time_budget: float = 10.0   # T(n) = (n/100)² × time_budget
+    time_budget: float = 10.0   # T(n) = (n/100)² * time_budget
     history_len: int = 2        # Ações no histórico
 
     # DQN
@@ -235,7 +249,7 @@ class DQNConfig:
 ## Arquitetura da Rede
 
 ```
-QNetwork: state (45) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
+QNetwork: state (45) -> Linear(64) -> ReLU -> Linear(64) -> ReLU -> Linear(21)
 ```
 
 - Input: estado contínuo (45 dims com history_len=2 e 21 ações)
