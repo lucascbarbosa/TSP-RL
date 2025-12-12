@@ -82,23 +82,16 @@ class State(IntEnum):
     MDP states based on gap percentage from optimal.
 
     Gap = ((cost - opt_cost) / opt_cost) * 100
+
+    Used for discrete state representation in Q-table.
+    DQN uses continuous state via DQNState instead.
     """
 
-    EXCELLENT = 0  # gap in [0, 2%]: reward 75
-    GOOD = 1  # gap in (2%, 5%]: reward 50
-    REGULAR = 2  # gap in (5%, 10%]: reward 25
-    POOR = 3  # gap > 10%: reward 0
-    BETTER = 4  # gap < 0 (better than known optimal): reward 100
-
-
-# State rewards mapping
-STATE_REWARDS: dict[State, int] = {
-    State.EXCELLENT: 75,
-    State.GOOD: 50,
-    State.REGULAR: 25,
-    State.POOR: 0,
-    State.BETTER: 100,
-}
+    EXCELLENT = 0  # gap in [0, 2%]
+    GOOD = 1  # gap in (2%, 5%]
+    REGULAR = 2  # gap in (5%, 10%]
+    POOR = 3  # gap > 10%
+    BETTER = 4  # gap < 0 (better than known optimal)
 
 
 class Action(IntEnum):
