@@ -8,6 +8,9 @@ from utils.plot import (
     load_gaps_from_csv,
     load_results_from_csv,
     generate_gap_violin_plots,
+    # DQN training
+    plot_learning_curve,
+    plot_action_distribution,
     # Results analysis
     plot_gap_distribution,
     plot_gap_by_size,
@@ -28,6 +31,8 @@ __all__ = [
     "load_gaps_from_csv",
     "load_results_from_csv",
     "generate_gap_violin_plots",
+    "plot_learning_curve",
+    "plot_action_distribution",
     "plot_gap_distribution",
     "plot_gap_by_size",
     "plot_gap_violins_by_size",
