@@ -38,6 +38,7 @@ def process_instance(
     tsp_instance: TSPInstance,
     output_dir: str,
     max_iter: int,
+    discount_time: bool,
 ) -> str:
     """
     Generate transitions for a single instance.
@@ -67,7 +68,7 @@ def process_instance(
 
     # Initialize solver and generate transitions
     solver = QILS(tsp_instance)
-    solver.generate_transitions(max_iter=max_iter, opt_cost=opt_cost, out_path=out_name)
+    solver.generate_transitions(max_iter=max_iter, opt_cost=opt_cost, out_path=out_name, discount_time=discount_time)
 
     return f"Processed {tsp_instance.name}"
 
@@ -118,6 +119,13 @@ def main() -> None:
         default=None,
         help="Number of parallel workers (default: cpu_count - 2)",
     )
+
+    parser.add_argument(
+        "--discount-time",
+        action="store_true",
+        help="Discount time from reward calculation",
+    )
+
     args = parser.parse_args()
 
     # Ensure output directory exists
@@ -174,6 +182,7 @@ def main() -> None:
         process_instance,
         output_dir=args.output_dir,
         max_iter=args.max_iter,
+        discount_time=args.discount_time
     )
 
     # Use 'spawn' context to avoid CUDA re-initialization issues with fork

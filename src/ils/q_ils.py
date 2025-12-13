@@ -272,6 +272,7 @@ class QILS:
         max_iter: int = 50,
         opt_cost: float = 0.0,
         out_path: Union[str, Path] = "transitions.txt",
+        discount_time: bool = False,
     ) -> Solution:
         """
         Generate transition data for MDP training.
@@ -320,8 +321,9 @@ class QILS:
 
             # Record transition
             f_state, reward = self.get_state(new_solution.cost, opt_cost)
-            time_discount = min(20, 10*(end_operator_time - start_operator_time))
-            reward -= time_discount
+            if discount_time:
+                time_discount = min(20, 10*(end_operator_time - start_operator_time))
+                reward -= time_discount
             
             output_lines.append(f"{i_state.value} {action.value} {reward} {f_state.value}")
 
@@ -338,6 +340,7 @@ class QILS:
         verbose: bool = True,
         early_stop: bool = True,
         early_stop_target: Optional[float] = None,
+        run_random: Optional[bool] = False
     ) -> Solution:
         """
         Run Q-ILS using the learned Q-table.
@@ -384,6 +387,7 @@ class QILS:
         iter_without_improvement = 0
         iteration = 0
         best_iteration = 0
+        action_list = list(ACTION_DECODE.keys())
 
         while iter_without_improvement < max_iter:
             iteration += 1
@@ -392,8 +396,12 @@ class QILS:
             i_state, _ = self.get_state(ls_solution.cost, opt_cost)
             stats.state_counts[i_state.name] += 1
 
-            # Select action via Q-table
-            action = self.choose_action(i_state, epsilon=epsilon)
+            # Select action via Q-table or random
+            if run_random:
+                action = random.choice(action_list)
+            else:
+                action = self.choose_action(i_state, epsilon=epsilon)
+
             stats.action_counts[action.name] += 1
             self.last_action = action
             self.last_state = i_state

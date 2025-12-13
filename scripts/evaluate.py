@@ -140,7 +140,7 @@ def initialize_csv(filename: str) -> None:
             )
 
 
-def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
+def process_instance(args: tuple[int, str, int, float, bool, bool]) -> Optional[list]:
     """
     Process a single TSP instance.
 
@@ -150,7 +150,7 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
     Returns:
         Row data for CSV or None on failure.
     """
-    instance_id, instance_type, max_iter, epsilon, allow_early_stop = args
+    instance_id, instance_type, max_iter, epsilon, allow_early_stop, run_random = args
 
     try:
         # Load instance
@@ -196,6 +196,7 @@ def process_instance(args: tuple[int, str, int, float, bool]) -> Optional[list]:
             verbose=False,
             early_stop=allow_early_stop,
             early_stop_target=early_stop_target,
+            run_random=run_random,
         )
 
         # Get stats from solver
@@ -294,6 +295,11 @@ def main() -> None:
         action="store_true",
         help="Disable early stop when reaching optimal cost",
     )
+    parser.add_argument(
+        "--run-random",
+        action="store_true",
+        help="Run baseline without q-table",
+    )
     args = parser.parse_args()
 
     # Load processed instances and initialize CSV
@@ -306,7 +312,7 @@ def main() -> None:
 
     # Build job list (instance_id, instance_type, max_iter, epsilon, early_stop)
     early_stop = not args.no_early_stop
-    jobs: list[tuple[int, str, int, float, bool]] = []
+    jobs: list[tuple[int, str, int, float, bool, bool]] = []
 
     for instance_type in args.types:
         key = f"data/{instance_type}.json"
@@ -343,7 +349,7 @@ def main() -> None:
                 filtered_count += 1
                 continue
 
-            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop))
+            jobs.append((instance_id, instance_type, args.max_iter, args.epsilon, early_stop, args.run_random))
 
         if filtered_count > 0:
             print(f"  {instance_type}: skipped {filtered_count} instances (no Q-table for their size)")
