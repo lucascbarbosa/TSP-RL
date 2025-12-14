@@ -291,6 +291,86 @@ def plot_q_values_heatmap(
         plt.close()
 
 
+def plot_q_values_heatmap_time_comparison(
+    q_matrix_early: NDArray[np.float64],
+    q_matrix_late: NDArray[np.float64],
+    gap_labels: Optional[List[str]] = None,
+    action_labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+    t_early: float = 0.8,
+    t_late: float = 0.2,
+) -> None:
+    """
+    Plot Q-values heatmaps comparing early vs late episode (time remaining).
+
+    Shows how the learned policy changes based on remaining time budget.
+    Displays two heatmaps stacked vertically with shared colorbar.
+
+    Args:
+        q_matrix_early: Q-values with high time remaining (e.g., 80%).
+        q_matrix_late: Q-values with low time remaining (e.g., 20%).
+        gap_labels: Labels for Y-axis (gap levels).
+        action_labels: Labels for X-axis (actions).
+        title: Base plot title.
+        save_path: Path to save figure (displays if None).
+        t_early: Time ratio for early episode (for subtitle).
+        t_late: Time ratio for late episode (for subtitle).
+    """
+    n_gaps, n_actions = q_matrix_early.shape
+
+    if gap_labels is None:
+        default_gaps = [0, 1, 2, 5, 10, 20, 50]
+        gap_labels = [f"{g}%" for g in default_gaps[:n_gaps]]
+    if action_labels is None:
+        action_labels = [f"A{i}" for i in range(n_actions)]
+
+    # Use shared color scale
+    vmin = min(q_matrix_early.min(), q_matrix_late.min())
+    vmax = max(q_matrix_early.max(), q_matrix_late.max())
+
+    fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True, constrained_layout=True)
+
+    # Early episode (top)
+    im1 = axes[0].imshow(q_matrix_early, aspect="auto", cmap="YlOrRd", vmin=vmin, vmax=vmax)
+    axes[0].set_yticks(range(n_gaps))
+    axes[0].set_yticklabels(gap_labels)
+    axes[0].set_ylabel("Gap Level")
+    axes[0].set_title(f"Early episode ({int(t_early * 100)}% time remaining)", fontsize=10)
+
+    for i in range(n_gaps):
+        best_action = int(np.argmax(q_matrix_early[i, :]))
+        axes[0].add_patch(plt.Rectangle((best_action - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="black", linewidth=2))
+
+    # Late episode (bottom)
+    im2 = axes[1].imshow(q_matrix_late, aspect="auto", cmap="YlOrRd", vmin=vmin, vmax=vmax)
+    axes[1].set_xticks(range(n_actions))
+    axes[1].set_xticklabels(action_labels, rotation=45, ha="right", fontsize=8)
+    axes[1].set_yticks(range(n_gaps))
+    axes[1].set_yticklabels(gap_labels)
+    axes[1].set_xlabel("Action")
+    axes[1].set_ylabel("Gap Level")
+    axes[1].set_title(f"Late episode ({int(t_late * 100)}% time remaining)", fontsize=10)
+
+    for i in range(n_gaps):
+        best_action = int(np.argmax(q_matrix_late[i, :]))
+        axes[1].add_patch(plt.Rectangle((best_action - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="black", linewidth=2))
+
+    # Shared colorbar
+    cbar = fig.colorbar(im2, ax=axes, orientation="vertical", fraction=0.02, pad=0.04)
+    cbar.set_label("Q-value", rotation=270, labelpad=15)
+
+    if title:
+        fig.suptitle(title, fontsize=12)
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
 # =============================================================================
 # Results Plots
 # =============================================================================

@@ -26,6 +26,7 @@ from utils import (
     plot_learning_curve,
     plot_action_distribution,
     plot_q_values_heatmap,
+    plot_q_values_heatmap_time_comparison,
     plot_gap_violins_by_size_method,
     plot_time_vs_gap_scatter,
     load_gaps_by_type_method,
@@ -85,7 +86,14 @@ def run_plots(
 
     action_labels = generate_action_labels()
     action_labels_list = [action_labels.get(i, f"A{i}") for i in range(N_ACTIONS)]
-    generated = {"learning_curves": [], "action_dists": [], "heatmaps": [], "violins": [], "scatters": []}
+    generated = {
+        "learning_curves": [],
+        "action_dists": [],
+        "heatmaps": [],
+        "heatmaps_time": [],
+        "violins": [],
+        "scatters": [],
+    }
 
     # Find model files
     model_paths = sorted(glob(models_pattern))
@@ -151,6 +159,25 @@ def run_plots(
             generated["heatmaps"].append(str(plot_path))
             if verbose:
                 print(f"  Saved: {plot_path}")
+
+            # Q-values time comparison heatmap (80% vs 20% time remaining)
+            q_matrix_early = compute_q_matrix(model, t_ratio=0.8)
+            q_matrix_late = compute_q_matrix(model, t_ratio=0.2)
+
+            plot_path_time = output_dir / f"{name}_q_heatmap_time.png"
+            plot_q_values_heatmap_time_comparison(
+                q_matrix_early,
+                q_matrix_late,
+                gap_labels,
+                act_labels,
+                title=f"Q-values by Time: {name}",
+                save_path=plot_path_time,
+                t_early=0.8,
+                t_late=0.2,
+            )
+            generated["heatmaps_time"].append(str(plot_path_time))
+            if verbose:
+                print(f"  Saved: {plot_path_time}")
         except Exception as e:
             if verbose:
                 print(f"  Error generating Q-heatmap: {e}")

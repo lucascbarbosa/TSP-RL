@@ -299,6 +299,23 @@ Todas as variantes usam kernels Numba JIT (~20-100x mais rápido que Python puro
 - **11.110 instâncias por tipo** (1.111 por tamanho)
 - **Split**: 90% treino, 10% teste (seed=42)
 
+## Outputs do Pipeline
+
+O pipeline gera os seguintes arquivos em `data/plots/`:
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `{type}_n{size}_learning_curve.png` | Curva de aprendizado (gap por episódio) |
+| `{type}_n{size}_action_dist.png` | Distribuição de ações (últimos 10% episódios) |
+| `{type}_n{size}_q_heatmap.png` | Heatmap Q-values (gap × ação, t=50%) |
+| `{type}_n{size}_q_heatmap_time.png` | Heatmap comparativo: t=80% vs t=20% |
+| `{type}_gaps_violin.png` | Violin plot de gaps por tamanho |
+| `{type}_time_vs_gap.png` | Scatter tempo × gap |
+
+O heatmap comparativo (`*_q_heatmap_time.png`) mostra como a política muda com o tempo restante:
+- **Top (80%)**: Início do episódio — espera-se mais diversificação (GRASP, restarts)
+- **Bottom (20%)**: Fim do episódio — espera-se mais intensificação (perturbações leves)
+
 ## Referências
 
 - Mnih et al. (2015). *Human-level control through deep reinforcement learning*. Nature.
