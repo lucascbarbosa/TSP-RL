@@ -59,8 +59,6 @@ def run_plots(
     models_pattern: str = "models/dqn/*.pt",
     results_pattern: str = "data/results/*.csv",
     output_dir: str = "data/plots",
-    history_len: int = 2,
-    hidden_dim: int = 64,
     verbose: bool = True,
 ) -> dict:
     """
@@ -70,8 +68,6 @@ def run_plots(
         models_pattern: Glob pattern for model files.
         results_pattern: Glob pattern for result CSVs.
         output_dir: Output directory for plots.
-        history_len: History length (must match models).
-        hidden_dim: Hidden dimension (must match models).
         verbose: Print progress.
 
     Returns:
@@ -81,7 +77,6 @@ def run_plots(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     action_labels = generate_action_labels()
-    state_dim = 3 + history_len * N_ACTIONS
     generated = {"learning_curves": [], "heatmaps": [], "violins": []}
 
     # Find model files
@@ -118,7 +113,8 @@ def run_plots(
 
         # Q-values heatmap
         try:
-            model = load_model(model_path, state_dim, N_ACTIONS, hidden_dim)
+            model = load_model(model_path)
+            history_len = (model.state_dim - 3) // N_ACTIONS
             q_matrix = compute_q_matrix(model, N_ACTIONS, history_len)
             gap_labels = ["0%", "1%", "2%", "5%", "10%", "20%", "50%"]
             act_labels = [action_labels.get(i, f"A{i}") for i in range(N_ACTIONS)]
@@ -179,16 +175,12 @@ def main() -> None:
     parser.add_argument("--models", type=str, default="models/dqn/*.pt")
     parser.add_argument("--results", type=str, default="data/results/*.csv")
     parser.add_argument("--output_dir", type=str, default="data/plots")
-    parser.add_argument("--history_len", type=int, default=2)
-    parser.add_argument("--hidden_dim", type=int, default=64)
     args = parser.parse_args()
 
     run_plots(
         models_pattern=args.models,
         results_pattern=args.results,
         output_dir=args.output_dir,
-        history_len=args.history_len,
-        hidden_dim=args.hidden_dim,
     )
 
 

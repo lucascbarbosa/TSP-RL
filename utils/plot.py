@@ -340,8 +340,8 @@ def plot_q_values_heatmap(
         save_path: Path to save figure (displays if None).
 
     Example:
-        >>> from src.rl.dqn import compute_q_matrix, load_model, N_ACTIONS
-        >>> model = load_model("model.pt", state_dim=45)
+        >>> from src.rl.dqn import compute_q_matrix, load_model
+        >>> model = load_model("model.pt")
         >>> q_matrix = compute_q_matrix(model)
         >>> plot_q_values_heatmap(q_matrix, title="Learned Q-values")
     """

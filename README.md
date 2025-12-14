@@ -177,13 +177,15 @@ print(f"Gap médio final: {np.mean(stats.episode_best_gaps[-100:]):.2f}%")
 ```python
 from src import TSPDataset, load_model, evaluate_dqn, DQNConfig, N_ACTIONS
 
-# Carregar modelo treinado
-state_dim = 3 + 2 * N_ACTIONS  # 45 com history_len=2
-model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=state_dim)
+# Carregar modelo (arquitetura inferida do checkpoint)
+model = load_model("models/dqn/EUC_2D_n050.pt")
+
+# Inferir history_len do modelo
+history_len = (model.state_dim - 3) // N_ACTIONS
 
 # Avaliar em instâncias de teste
 test_instances = list(TSPDataset("data/EUC_2D.json", instance_ids=range(1000, 1111)))
-config = DQNConfig(time_budget=10.0)
+config = DQNConfig(time_budget=10.0, history_len=history_len)
 
 gaps = evaluate_dqn(model, test_instances, config)
 print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")

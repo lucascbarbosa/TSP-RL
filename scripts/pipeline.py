@@ -162,9 +162,6 @@ def main():
                     model_path=model_path,
                     splits=splits,
                     time_budget=config.time_budget,
-                    history_len=config.history_len,
-                    hidden_dim=config.hidden_dim,
-                    device=config.device,
                     workers=config.workers,
                     eval_limit=config.eval_limit,
                     baseline=config.baseline,
@@ -177,8 +174,6 @@ def main():
         run_plots(
             models_pattern="models/dqn/*.pt",
             results_pattern="data/results/*.csv",
-            history_len=config.history_len,
-            hidden_dim=config.hidden_dim,
         )
 
     timings["plots"], _ = run_step("4. Generating plots", step_plots)

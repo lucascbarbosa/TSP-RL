@@ -474,19 +474,25 @@ def evaluate_dqn(
 
 
 def save_model(model: QNetwork, path: str | Path) -> None:
-    """Save model weights to file."""
-    torch.save(model.state_dict(), path)
+    """Save model with architecture metadata."""
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "state_dim": model.state_dim,
+        "n_actions": model.n_actions,
+        "hidden_dim": model.hidden_dim,
+    }
+    torch.save(checkpoint, path)
 
 
-def load_model(
-    path: str | Path,
-    state_dim: int,
-    n_actions: int = N_ACTIONS,
-    hidden_dim: int = 64,
-) -> QNetwork:
-    """Load model weights from file."""
-    model = QNetwork(state_dim, n_actions=n_actions, hidden_dim=hidden_dim)
-    model.load_state_dict(torch.load(path, weights_only=True))
+def load_model(path: str | Path) -> QNetwork:
+    """Load model from checkpoint (architecture is inferred from metadata)."""
+    checkpoint = torch.load(path, weights_only=False)
+    model = QNetwork(
+        state_dim=checkpoint["state_dim"],
+        n_actions=checkpoint["n_actions"],
+        hidden_dim=checkpoint["hidden_dim"],
+    )
+    model.load_state_dict(checkpoint["state_dict"])
     model.eval()
     return model
 

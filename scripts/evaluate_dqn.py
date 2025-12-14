@@ -93,12 +93,12 @@ def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, fl
 
 # Worker functions for parallel evaluation
 def _eval_worker_dqn(args: tuple) -> dict:
-    instance_id, dataset_path, model_path, config_dict = args
+    instance_id, dataset_path, model_path, time_budget = args
     dataset = TSPDataset(dataset_path, [instance_id])
     instance = next(iter(dataset))
-    config = DQNConfig(**{k: v for k, v in config_dict.items() if k != "hidden_dim"})
-    state_dim = 3 + config.history_len * N_ACTIONS
-    model = load_model(model_path, state_dim=state_dim, hidden_dim=config_dict.get("hidden_dim", 64))
+    model = load_model(model_path)
+    history_len = (model.state_dim - 3) // N_ACTIONS
+    config = DQNConfig(time_budget=time_budget, history_len=history_len)
     gap, elapsed, iters = evaluate_dqn_instance(model, instance, config)
     return {"instance_id": instance_id, "method": "DQN-ILS", "gap": gap, "time": elapsed, "iterations": iters}
 
@@ -115,9 +115,6 @@ def run_evaluation(
     model_path: str,
     splits: dict,
     time_budget: float = 10.0,
-    history_len: int = 2,
-    hidden_dim: int = 64,
-    device: str = "cpu",
     workers: int = 1,
     eval_limit: int | None = None,
     baseline: bool = False,
@@ -128,12 +125,9 @@ def run_evaluation(
     Evaluate a trained DQN model.
 
     Args:
-        model_path: Path to model file.
+        model_path: Path to model file (architecture inferred from checkpoint).
         splits: Dictionary with train/test splits.
         time_budget: Base time budget in seconds.
-        history_len: History length (must match model).
-        hidden_dim: Hidden dimension (must match model).
-        device: Device for evaluation.
         workers: Number of parallel workers.
         eval_limit: Limit test instances (None = no limit).
         baseline: Include GRASP+2opt baseline.
@@ -174,18 +168,11 @@ def run_evaluation(
     if verbose:
         print(f"Evaluating {instance_type} n={size} ({len(size_test_ids)} instances, {workers} workers)")
 
-    config_dict = {
-        "time_budget": time_budget,
-        "history_len": history_len,
-        "device": device,
-        "hidden_dim": hidden_dim,
-    }
     tb = compute_time_budget(size, time_budget)
-
     results = []
 
     # Parallel DQN evaluation
-    dqn_args = [(inst_id, dataset_path, model_path, config_dict) for inst_id in size_test_ids]
+    dqn_args = [(inst_id, dataset_path, model_path, tb) for inst_id in size_test_ids]
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(_eval_worker_dqn, arg): arg[0] for arg in dqn_args}
         for future in as_completed(futures):
@@ -256,13 +243,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate trained DQN models")
     parser.add_argument("--model", type=str, required=True, help="Model path or glob pattern")
     parser.add_argument("--split_path", type=str, default="data/splits.json")
-    parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--time_budget", type=float, default=10.0)
-    parser.add_argument("--history_len", type=int, default=2)
-    parser.add_argument("--hidden_dim", type=int, default=64)
-    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
     parser.add_argument(
         "--workers", type=int, default=None, help=f"Parallel workers (default: {get_default_workers()})"
     )
@@ -290,9 +273,6 @@ def main() -> None:
             model_path=model_path,
             splits=splits,
             time_budget=args.time_budget,
-            history_len=args.history_len,
-            hidden_dim=args.hidden_dim,
-            device=args.device,
             workers=n_workers,
             eval_limit=args.limit,
             baseline=args.baseline,
