@@ -51,16 +51,18 @@ def parse_model_name(model_path: str) -> tuple[str, int]:
 BASELINE_GRASP_ALPHAS = [0.03, 0.1, 0.3]
 
 
-def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float, int]:
+def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float, int, float]:
     """
     Baseline: GRASP + 2-opt full with time budget.
 
     Randomly selects alpha from the same pool available to DQN-ILS agent
     for fair comparison (alpha ∈ {0.03, 0.1, 0.3}).
+
+    Returns:
+        (gap, elapsed_time, iterations, best_cost)
     """
     t0 = time.perf_counter()
-    opt_tour = instance.opt_tour
-    opt_cost = sum(instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
+    opt_cost = instance.opt_cost
 
     best_cost = float("inf")
     iterations = 0
@@ -75,8 +77,14 @@ def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float,
         iterations += 1
 
     elapsed = time.perf_counter() - t0
-    gap = ((best_cost - opt_cost) / opt_cost) * 100
-    return gap, elapsed, iterations
+
+    # Compute gap (vs optimal if available, else vs initial baseline)
+    if opt_cost is not None:
+        gap = ((best_cost - opt_cost) / opt_cost) * 100
+    else:
+        gap = ((best_cost - instance.baseline_cost) / instance.baseline_cost) * 100
+
+    return gap, elapsed, iterations, best_cost
 
 
 def evaluate_dqn_instance(
@@ -131,7 +139,57 @@ def evaluate_dqn_instance(
 
 
 # Worker functions for parallel evaluation
-def _eval_worker_dqn(args: tuple) -> dict:
+def _eval_worker_unified(args: tuple) -> list[dict]:
+    """
+    Unified worker: loads instance once, runs baseline then DQN.
+
+    By running baseline first, we use its result (from full time budget)
+    as the reference for DQN's state computation. This is more accurate
+    than the quick single-shot baseline_cost.
+    """
+    instance_id, dataset_path, model_path, time_budget, run_baseline = args
+
+    # Load instance once
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
+    instance = next(iter(dataset))
+
+    results = []
+
+    # Run baseline first (if requested) - use result as reference for DQN
+    if run_baseline:
+        bl_gap, bl_elapsed, bl_iters, bl_best_cost = evaluate_baseline_grasp(instance, time_budget)
+        results.append(
+            {
+                "instance_id": instance_id,
+                "method": "GRASP+2opt",
+                "gap": bl_gap,
+                "time": bl_elapsed,
+                "iterations": bl_iters,
+            }
+        )
+        # Update baseline_cost with the result from full evaluation
+        instance.update_baseline_cost(bl_best_cost)
+
+    # Run DQN (uses baseline as reference if use_baseline=True)
+    model = load_model(model_path)
+    history_len = (model.state_dim - 3) // N_ACTIONS
+    config = DQNConfig(time_budget=time_budget, history_len=history_len)
+    dqn_gap, dqn_elapsed, dqn_iters, _ = evaluate_dqn_instance(model, instance, config, use_baseline=run_baseline)
+    results.append(
+        {
+            "instance_id": instance_id,
+            "method": "DQN-ILS",
+            "gap": dqn_gap,
+            "time": dqn_elapsed,
+            "iterations": dqn_iters,
+        }
+    )
+
+    return results
+
+
+def _eval_worker_dqn_only(args: tuple) -> dict:
+    """Worker for DQN-only evaluation (no baseline comparison)."""
     instance_id, dataset_path, model_path, time_budget, use_baseline = args
     dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
@@ -140,14 +198,6 @@ def _eval_worker_dqn(args: tuple) -> dict:
     config = DQNConfig(time_budget=time_budget, history_len=history_len)
     gap, elapsed, iters, _ = evaluate_dqn_instance(model, instance, config, use_baseline=use_baseline)
     return {"instance_id": instance_id, "method": "DQN-ILS", "gap": gap, "time": elapsed, "iterations": iters}
-
-
-def _eval_worker_baseline(args: tuple) -> dict:
-    instance_id, dataset_path, time_budget = args
-    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
-    instance = next(iter(dataset))
-    gap, elapsed, iters = evaluate_baseline_grasp(instance, time_budget)
-    return {"instance_id": instance_id, "method": "GRASP+2opt", "gap": gap, "time": elapsed, "iterations": iters}
 
 
 def run_evaluation(
@@ -214,29 +264,30 @@ def run_evaluation(
     tb = compute_time_budget(size, time_budget)
     results = []
 
-    # Parallel DQN evaluation (use_baseline_reference for test instances)
-    dqn_args = [(inst_id, dataset_path, model_path, tb, use_baseline_reference) for inst_id in size_test_ids]
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(_eval_worker_dqn, arg): arg[0] for arg in dqn_args}
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(
-                {
-                    "Type": instance_type,
-                    "Dimension": size,
-                    "Instance": result["instance_id"],
-                    "Method": result["method"],
-                    "Gap": f"{result['gap']:.4f}%",
-                    "Time (s)": f"{result['time']:.3f}",
-                    "Iterations": result["iterations"],
-                }
-            )
-
-    # Parallel baseline evaluation
     if baseline:
-        baseline_args = [(inst_id, dataset_path, tb) for inst_id in size_test_ids]
+        # Unified evaluation: baseline first, then DQN (uses baseline result as reference)
+        # This loads each instance only once and reuses the baseline result
+        unified_args = [(inst_id, dataset_path, model_path, tb, True) for inst_id in size_test_ids]
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(_eval_worker_baseline, arg): arg[0] for arg in baseline_args}
+            futures = {executor.submit(_eval_worker_unified, arg): arg[0] for arg in unified_args}
+            for future in as_completed(futures):
+                for result in future.result():  # Each worker returns list of 2 results
+                    results.append(
+                        {
+                            "Type": instance_type,
+                            "Dimension": size,
+                            "Instance": result["instance_id"],
+                            "Method": result["method"],
+                            "Gap": f"{result['gap']:.4f}%",
+                            "Time (s)": f"{result['time']:.3f}",
+                            "Iterations": result["iterations"],
+                        }
+                    )
+    else:
+        # DQN-only evaluation
+        dqn_args = [(inst_id, dataset_path, model_path, tb, use_baseline_reference) for inst_id in size_test_ids]
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_eval_worker_dqn_only, arg): arg[0] for arg in dqn_args}
             for future in as_completed(futures):
                 result = future.result()
                 results.append(
