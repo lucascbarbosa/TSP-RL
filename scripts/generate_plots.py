@@ -37,15 +37,19 @@ def generate_action_labels() -> dict[int, str]:
     """Generate short action labels from ACTION_DECODE."""
     labels = {}
     for action_id, (pert, ls) in ACTION_DECODE.items():
-        # Shorten names
-        pert_short = {
-            "two_swap": "swap",
-            "segment_reverse": "rev",
-            "random": "rand",
-            "nearest": "near",
-            "cheapest": "cheap",
-            "grasp": "grasp",
-        }.get(pert, pert[:4])
+        # Shorten perturbation names
+        if pert.startswith("grasp_"):
+            # grasp_0.03 -> gr1, grasp_0.1 -> gr2, grasp_0.3 -> gr3
+            alpha = pert.split("_")[1]
+            pert_short = {"0.03": "gr1", "0.1": "gr2", "0.3": "gr3"}.get(alpha, "gr?")
+        else:
+            pert_short = {
+                "two_swap": "swap",
+                "segment_reverse": "rev",
+                "random": "rand",
+                "nearest": "near",
+                "cheapest": "cheap",
+            }.get(pert, pert[:4])
 
         ls_short = {
             "two_opt_full": "2opt",
