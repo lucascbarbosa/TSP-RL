@@ -92,6 +92,7 @@ class DQNEnv:
         time_budget: float,
         history_len: int = 1,
         k: int | float = 0.5,
+        use_baseline: bool = False,
     ) -> None:
         """
         Initialize environment.
@@ -101,22 +102,33 @@ class DQNEnv:
             time_budget: Maximum episode duration in seconds.
             history_len: Number of past actions to track in state.
             k: Neighbor list parameter for 2-opt.
+            use_baseline: If True, use baseline_cost as reference instead of opt_cost.
+                          Useful for evaluation/deployment when optimal is unknown.
         """
         self.instance = instance
         self.time_budget = time_budget
         self.history_len = history_len
+        self.use_baseline = use_baseline
 
         # Reuse precomputed distance matrix
         self.dist_matrix = instance.dist_matrix
 
-        # Compute optimal cost for gap calculation
-        opt_tour = instance.opt_tour
-        if opt_tour:
-            self.opt_cost = sum(
-                instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
-            )
+        # Reference cost for gap/state calculation
+        if use_baseline:
+            # Use baseline (GRASP+2opt) as reference - doesn't need privileged info
+            self.reference_cost = instance.baseline_cost
         else:
-            self.opt_cost = 1.0
+            # Use optimal cost if available, otherwise baseline
+            opt_tour = instance.opt_tour
+            if opt_tour:
+                self.reference_cost = sum(
+                    instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
+                )
+            else:
+                self.reference_cost = instance.baseline_cost
+
+        # Keep opt_cost for reporting (if available)
+        self.opt_cost = instance.opt_cost
 
         # Pre-compute neighbor lists for large instances
         n = instance.dimension
@@ -145,8 +157,8 @@ class DQNEnv:
         self.solution = Solution(tour, self.dist_matrix, is_closed=True)
         self.solution = two_opt_dlb(self.solution, neighbors=self._neighbors)
 
-        # Initialize tracking
-        gap = ((self.solution.cost - self.opt_cost) / self.opt_cost) * 100
+        # Initialize tracking (gap relative to reference cost)
+        gap = ((self.solution.cost - self.reference_cost) / self.reference_cost) * 100
         self.best_gap = gap
         self.history = [-1] * self.history_len
         self.t_start = time.perf_counter()
@@ -174,8 +186,8 @@ class DQNEnv:
         # Update solution
         self.solution = new_solution
 
-        # Compute reward (improvement in best gap)
-        gap = ((new_solution.cost - self.opt_cost) / self.opt_cost) * 100
+        # Compute reward (improvement in best gap relative to reference)
+        gap = ((new_solution.cost - self.reference_cost) / self.reference_cost) * 100
         old_best = self.best_gap
         new_best = min(self.best_gap, gap)
         reward = compute_delta_reward(old_best, new_best)
@@ -184,9 +196,10 @@ class DQNEnv:
         # Update history
         self.history = self.history[1:] + [action]
 
-        # Check if done (time budget exhausted or optimal found)
+        # Check if done (time budget exhausted)
+        # Note: we don't check for optimal anymore since reference may be baseline
         elapsed = time.perf_counter() - self.t_start
-        done = bool(elapsed >= self.time_budget or self.best_gap <= 1e-8)
+        done = bool(elapsed >= self.time_budget)
 
         return self._get_state(), reward, done
 
@@ -194,7 +207,7 @@ class DQNEnv:
         """Get current state."""
         assert self.solution is not None
 
-        gap = ((self.solution.cost - self.opt_cost) / self.opt_cost) * 100
+        gap = ((self.solution.cost - self.reference_cost) / self.reference_cost) * 100
         elapsed = time.perf_counter() - self.t_start
         t_ratio = max(0.0, 1.0 - elapsed / self.time_budget)
 

@@ -79,14 +79,28 @@ def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float,
     return gap, elapsed, iterations
 
 
-def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, float, int]:
-    """Evaluate DQN on a single instance."""
+def evaluate_dqn_instance(
+    model, instance, config: DQNConfig, use_baseline: bool = False
+) -> tuple[float, float, int, float]:
+    """
+    Evaluate DQN on a single instance.
+
+    Args:
+        model: Trained DQN model.
+        instance: TSP instance.
+        config: DQN configuration.
+        use_baseline: If True, use baseline_cost as reference for state computation.
+                     Gap is still reported relative to opt_cost for comparison.
+
+    Returns:
+        (gap_vs_opt, elapsed_time, iterations, best_cost)
+    """
     import torch
 
     time_budget = compute_time_budget(instance.dimension, config.time_budget)
 
     t0 = time.perf_counter()
-    env = DQNEnv(instance, time_budget, config.history_len)
+    env = DQNEnv(instance, time_budget, config.history_len, use_baseline=use_baseline)
     state = env.reset()
     done = False
     iterations = 0
@@ -100,18 +114,31 @@ def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, fl
         iterations += 1
 
     elapsed = time.perf_counter() - t0
-    return env.best_gap, elapsed, iterations
+
+    # Report gap relative to optimal (not baseline) for fair comparison
+    best_cost = env.solution.cost
+    opt_cost = instance.opt_cost
+    if opt_cost is not None:
+        gap = ((best_cost - opt_cost) / opt_cost) * 100
+    else:
+        # If no optimal available, report relative to baseline
+        gap = ((best_cost - instance.baseline_cost) / instance.baseline_cost) * 100
+
+    # Update baseline if we found a better solution (improves future evaluations)
+    instance.update_baseline_cost(best_cost)
+
+    return gap, elapsed, iterations, best_cost
 
 
 # Worker functions for parallel evaluation
 def _eval_worker_dqn(args: tuple) -> dict:
-    instance_id, dataset_path, model_path, time_budget = args
+    instance_id, dataset_path, model_path, time_budget, use_baseline = args
     dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
     model = load_model(model_path)
     history_len = (model.state_dim - 3) // N_ACTIONS
     config = DQNConfig(time_budget=time_budget, history_len=history_len)
-    gap, elapsed, iters = evaluate_dqn_instance(model, instance, config)
+    gap, elapsed, iters, _ = evaluate_dqn_instance(model, instance, config, use_baseline=use_baseline)
     return {"instance_id": instance_id, "method": "DQN-ILS", "gap": gap, "time": elapsed, "iterations": iters}
 
 
@@ -132,6 +159,7 @@ def run_evaluation(
     baseline: bool = False,
     output_dir: str = "data/results",
     verbose: bool = True,
+    use_baseline_reference: bool = True,
 ) -> dict:
     """
     Evaluate a trained DQN model.
@@ -142,9 +170,12 @@ def run_evaluation(
         time_budget: Base time budget in seconds.
         workers: Number of parallel workers.
         eval_limit: Limit test instances (None = no limit).
-        baseline: Include GRASP+2opt baseline.
+        baseline: Include GRASP+2opt baseline comparison.
         output_dir: Output directory for results.
         verbose: Print progress.
+        use_baseline_reference: If True, DQN uses baseline_cost as reference for
+                               state computation (doesn't need opt_cost). Gap is
+                               still reported vs optimal for fair comparison.
 
     Returns:
         Dictionary with evaluation results.
@@ -183,8 +214,8 @@ def run_evaluation(
     tb = compute_time_budget(size, time_budget)
     results = []
 
-    # Parallel DQN evaluation
-    dqn_args = [(inst_id, dataset_path, model_path, tb) for inst_id in size_test_ids]
+    # Parallel DQN evaluation (use_baseline_reference for test instances)
+    dqn_args = [(inst_id, dataset_path, model_path, tb, use_baseline_reference) for inst_id in size_test_ids]
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(_eval_worker_dqn, arg): arg[0] for arg in dqn_args}
         for future in as_completed(futures):
