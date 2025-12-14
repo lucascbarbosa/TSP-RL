@@ -8,6 +8,7 @@ Usage:
 """
 
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -46,8 +47,17 @@ def parse_model_name(model_path: str) -> tuple[str, int]:
     return match.group(1), int(match.group(2))
 
 
+# GRASP alphas available to DQN-ILS agent (actions 10-15)
+BASELINE_GRASP_ALPHAS = [0.03, 0.1, 0.3]
+
+
 def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float, int]:
-    """Baseline: GRASP + 2-opt full with time budget."""
+    """
+    Baseline: GRASP + 2-opt full with time budget.
+
+    Randomly selects alpha from the same pool available to DQN-ILS agent
+    for fair comparison (alpha ∈ {0.03, 0.1, 0.3}).
+    """
     t0 = time.perf_counter()
     opt_tour = instance.opt_tour
     opt_cost = sum(instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour)))
@@ -55,7 +65,9 @@ def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float,
     best_cost = float("inf")
     iterations = 0
     while time.perf_counter() - t0 < time_budget:
-        tour, _ = grasp(instance)
+        # Randomly select alpha each iteration (same pool as DQN-ILS)
+        alpha = random.choice(BASELINE_GRASP_ALPHAS)
+        tour, _ = grasp(instance, alpha=alpha)
         sol = Solution(tour, instance.dist_matrix, is_closed=True)
         improved = two_opt_full(sol)
         if improved.cost < best_cost:
