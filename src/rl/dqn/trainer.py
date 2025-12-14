@@ -39,10 +39,9 @@ class DQNConfig:
     buffer_size: int = 50000
     target_update_freq: int = 50  # Episodes between target updates
 
-    # Exploration
+    # Exploration (logarithmic decay from start to end over all episodes)
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
-    epsilon_decay: float = 0.995  # Per episode
 
     # Training
     n_episodes: int = 2000
@@ -68,7 +67,30 @@ class TrainingStats:
     episode_lengths: list[int] = field(default_factory=list)
     losses: list[float] = field(default_factory=list)
     epsilons: list[float] = field(default_factory=list)
+    # Action counts from final 10% of episodes (low epsilon, learned policy)
     action_counts: dict[int, int] = field(default_factory=lambda: {i: 0 for i in range(N_ACTIONS)})
+
+
+def compute_epsilon(episode: int, n_episodes: int, eps_start: float, eps_end: float) -> float:
+    """
+    Compute epsilon with logarithmic decay.
+
+    Guarantees epsilon goes from eps_start to eps_end over n_episodes.
+    Formula: eps(t) = eps_start * (eps_end / eps_start) ^ (t / T)
+
+    Args:
+        episode: Current episode (0-indexed).
+        n_episodes: Total number of episodes.
+        eps_start: Initial epsilon.
+        eps_end: Final epsilon.
+
+    Returns:
+        Epsilon value for the current episode.
+    """
+    if n_episodes <= 1:
+        return eps_end
+    progress = episode / (n_episodes - 1)
+    return eps_start * (eps_end / eps_start) ** progress
 
 
 def compute_time_budget(n: int, base_budget: float = 10.0) -> float:
@@ -111,6 +133,14 @@ def _episode_worker(args: tuple) -> dict:
     q_net.load_state_dict(weights)
     q_net.eval()
 
+    # Compute epsilon for this episode (logarithmic decay)
+    epsilon = compute_epsilon(
+        instance_idx,
+        config_dict["n_episodes"],
+        config_dict["epsilon_start"],
+        config_dict["epsilon_end"],
+    )
+
     # Run episode
     time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
     env = DQNEnv(instance, time_budget, config_dict["history_len"])
@@ -120,8 +150,6 @@ def _episode_worker(args: tuple) -> dict:
     actions_taken = []
     episode_reward = 0.0
     done = False
-
-    epsilon = config_dict["epsilon"]
 
     while not done:
         # Epsilon-greedy action selection
@@ -152,11 +180,13 @@ def _episode_worker(args: tuple) -> dict:
         state = next_state
 
     return {
+        "episode": instance_idx,
         "transitions": transitions,
         "actions": actions_taken,
         "reward": episode_reward,
         "best_gap": env.best_gap,
         "steps": len(transitions),
+        "epsilon": epsilon,
     }
 
 
@@ -222,9 +252,12 @@ def _train_dqn_sequential(
     replay_buffer = ReplayBuffer(config.buffer_size)
 
     stats = TrainingStats()
-    epsilon = config.epsilon_start
+    final_episodes_start = int(config.n_episodes * 0.9)  # Last 10% for action stats
 
     for episode in range(config.n_episodes):
+        # Compute epsilon for this episode (logarithmic decay)
+        epsilon = compute_epsilon(episode, config.n_episodes, config.epsilon_start, config.epsilon_end)
+
         # Sample random instance
         instance = random.choice(instances)
         env = DQNEnv(instance, time_budget, config.history_len)
@@ -257,8 +290,9 @@ def _train_dqn_sequential(
                 done,
             )
 
-            # Track action
-            stats.action_counts[action] += 1
+            # Track action (only final 10% of episodes for learned policy stats)
+            if episode >= final_episodes_start:
+                stats.action_counts[action] += 1
 
             episode_reward += reward
             episode_steps += 1
@@ -291,9 +325,6 @@ def _train_dqn_sequential(
                 optimizer.step()
 
                 stats.losses.append(loss.item())
-
-        # Decay epsilon
-        epsilon = max(config.epsilon_end, epsilon * config.epsilon_decay)
 
         # Update target network
         if (episode + 1) % config.target_update_freq == 0:
@@ -344,99 +375,132 @@ def _train_dqn_parallel(
     replay_buffer = ReplayBuffer(config.buffer_size)
 
     stats = TrainingStats()
-    epsilon = config.epsilon_start
+    final_episodes_start = int(config.n_episodes * 0.9)  # Last 10% for action stats
 
     # Calculate number of batches
     n_batches = (config.n_episodes + n_workers - 1) // n_workers
     episode_counter = 0
 
-    for batch_idx in range(n_batches):
-        # How many episodes in this batch
-        episodes_in_batch = min(n_workers, config.n_episodes - episode_counter)
-        if episodes_in_batch <= 0:
-            break
+    # Keep executor alive for entire training to avoid process spawn overhead
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        for batch_idx in range(n_batches):
+            # How many episodes in this batch
+            episodes_in_batch = min(n_workers, config.n_episodes - episode_counter)
+            if episodes_in_batch <= 0:
+                break
 
-        # Prepare worker arguments
-        weights = {k: v.cpu() for k, v in q_net.state_dict().items()}
-        config_dict = {
-            "time_budget": config.time_budget,
-            "history_len": config.history_len,
-            "hidden_dim": config.hidden_dim,
-            "epsilon": epsilon,
-        }
+            # Prepare worker arguments (each worker computes its own epsilon)
+            weights = {k: v.cpu() for k, v in q_net.state_dict().items()}
+            config_dict = {
+                "time_budget": config.time_budget,
+                "history_len": config.history_len,
+                "hidden_dim": config.hidden_dim,
+                "n_episodes": config.n_episodes,
+                "epsilon_start": config.epsilon_start,
+                "epsilon_end": config.epsilon_end,
+            }
 
-        worker_args = [
-            (episode_counter + i, dataset_path, instance_ids, weights, config_dict) for i in range(episodes_in_batch)
-        ]
+            worker_args = [
+                (episode_counter + i, dataset_path, instance_ids, weights, config_dict)
+                for i in range(episodes_in_batch)
+            ]
 
-        # Run episodes in parallel
-        batch_results = []
-        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            # Run episodes in parallel
+            batch_results = []
             futures = [executor.submit(_episode_worker, args) for args in worker_args]
             for future in as_completed(futures):
                 batch_results.append(future.result())
 
-        # Aggregate results
-        for result in batch_results:
-            # Add transitions to buffer
-            for transition in result["transitions"]:
-                replay_buffer.push(*transition)
+            # Aggregate results
+            for result in batch_results:
+                # Add transitions to buffer
+                for transition in result["transitions"]:
+                    replay_buffer.push(*transition)
 
-            # Track actions
-            for action in result["actions"]:
-                stats.action_counts[action] += 1
+                # Track actions (only final 10% of episodes for learned policy stats)
+                if result["episode"] >= final_episodes_start:
+                    for action in result["actions"]:
+                        stats.action_counts[action] += 1
 
-            # Record stats
-            stats.episode_rewards.append(result["reward"])
-            stats.episode_best_gaps.append(result["best_gap"])
-            stats.episode_lengths.append(result["steps"])
-            stats.epsilons.append(epsilon)
+                # Record stats
+                stats.episode_rewards.append(result["reward"])
+                stats.episode_best_gaps.append(result["best_gap"])
+                stats.episode_lengths.append(result["steps"])
+                stats.epsilons.append(result["epsilon"])
 
-            episode_counter += 1
+                episode_counter += 1
 
-        # Update network (if buffer has enough samples)
-        if len(replay_buffer) >= config.min_buffer_size:
-            # More updates for larger batches
-            n_updates = config.updates_per_episode * episodes_in_batch
-            for _ in range(n_updates):
-                batch = replay_buffer.sample(config.batch_size, config.device)
+            # Update network (if buffer has enough samples)
+            if len(replay_buffer) >= config.min_buffer_size:
+                # More updates for larger batches
+                n_updates = config.updates_per_episode * episodes_in_batch
+                for _ in range(n_updates):
+                    batch = replay_buffer.sample(config.batch_size, config.device)
 
-                # Compute Q(s, a)
-                q_values = q_net(batch.states)
-                q_selected = q_values.gather(1, batch.actions).squeeze(1)
+                    # Compute Q(s, a)
+                    q_values = q_net(batch.states)
+                    q_selected = q_values.gather(1, batch.actions).squeeze(1)
 
-                # Compute target: r + γ max Q_target(s', a')
-                with torch.no_grad():
-                    next_q = target_net(batch.next_states).max(dim=1)[0]
-                    targets = batch.rewards + config.gamma * next_q * (1 - batch.dones)
+                    # Compute target: r + γ max Q_target(s', a')
+                    with torch.no_grad():
+                        next_q = target_net(batch.next_states).max(dim=1)[0]
+                        targets = batch.rewards + config.gamma * next_q * (1 - batch.dones)
 
-                # Update
-                loss = F.mse_loss(q_selected, targets)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                    # Update
+                    loss = F.mse_loss(q_selected, targets)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
 
-                stats.losses.append(loss.item())
+                    stats.losses.append(loss.item())
 
-        # Decay epsilon (once per batch, scaled by batch size)
-        for _ in range(episodes_in_batch):
-            epsilon = max(config.epsilon_end, epsilon * config.epsilon_decay)
+            # Update target network
+            if episode_counter % config.target_update_freq < episodes_in_batch:
+                target_net.load_state_dict(q_net.state_dict())
 
-        # Update target network
-        if episode_counter % config.target_update_freq < episodes_in_batch:
-            target_net.load_state_dict(q_net.state_dict())
-
-        # Progress logging
-        if verbose and (episode_counter % 100 < episodes_in_batch or episode_counter == config.n_episodes):
-            recent_gaps = stats.episode_best_gaps[-100:]
-            avg_gap = np.mean(recent_gaps)
-            print(
-                f"Episode {episode_counter}/{config.n_episodes} | "
-                f"Avg gap (last 100): {avg_gap:.2f}% | "
-                f"ε: {epsilon:.3f}"
-            )
+            # Progress logging
+            if verbose and (episode_counter % 100 < episodes_in_batch or episode_counter == config.n_episodes):
+                recent_gaps = stats.episode_best_gaps[-100:]
+                avg_gap = np.mean(recent_gaps)
+                current_epsilon = stats.epsilons[-1] if stats.epsilons else config.epsilon_start
+                print(
+                    f"Episode {episode_counter}/{config.n_episodes} | "
+                    f"Avg gap (last 100): {avg_gap:.2f}% | "
+                    f"ε: {current_epsilon:.3f}"
+                )
 
     return q_net, stats
+
+
+def _eval_worker(args: tuple) -> float:
+    """Evaluate a single instance (worker function for parallel evaluation)."""
+    instance_id, dataset_path, weights, config_dict = args
+
+    # Load instance
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
+    instance = next(iter(dataset))
+
+    # Create network and load weights
+    state_dim = 3 + config_dict["history_len"] * N_ACTIONS
+    q_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config_dict["hidden_dim"])
+    q_net.load_state_dict(weights)
+    q_net.eval()
+
+    # Run evaluation episode (greedy policy)
+    time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
+    env = DQNEnv(instance, time_budget, config_dict["history_len"])
+
+    state = env.reset()
+    done = False
+
+    while not done:
+        with torch.no_grad():
+            state_tensor = torch.tensor(state.to_numpy(), dtype=torch.float32)
+            q_values = q_net(state_tensor)
+            action = int(q_values.argmax().item())
+        state, _, done = env.step(action)
+
+    return env.best_gap
 
 
 def evaluate_dqn(
@@ -444,19 +508,55 @@ def evaluate_dqn(
     instances: list[TSPInstance],
     config: DQNConfig,
     verbose: bool = False,
+    dataset_path: str | None = None,
+    instance_ids: list[int] | None = None,
 ) -> list[float]:
     """
     Evaluate trained DQN on test instances.
+
+    Supports parallel evaluation when config.n_workers > 1 and dataset_path/instance_ids are provided.
 
     Args:
         model: Trained Q-network.
         instances: List of test instances.
         config: Configuration (for time budget and history length).
         verbose: Print per-instance results.
+        dataset_path: Path to dataset JSON (required for parallel evaluation).
+        instance_ids: List of instance IDs (required for parallel evaluation).
 
     Returns:
         List of final gaps (%) for each instance.
     """
+    if not instances:
+        return []
+
+    # Use parallel evaluation if workers > 1 and we have dataset info
+    if config.n_workers > 1 and dataset_path is not None and instance_ids is not None:
+        weights = {k: v.cpu() for k, v in model.state_dict().items()}
+        config_dict = {
+            "time_budget": config.time_budget,
+            "history_len": config.history_len,
+            "hidden_dim": config.hidden_dim,
+        }
+
+        worker_args = [(inst_id, dataset_path, weights, config_dict) for inst_id in instance_ids]
+
+        gaps = []
+        with ProcessPoolExecutor(max_workers=config.n_workers) as executor:
+            futures = {executor.submit(_eval_worker, args): i for i, args in enumerate(worker_args)}
+            results = [None] * len(worker_args)
+            for future in as_completed(futures):
+                idx = futures[future]
+                results[idx] = future.result()
+            gaps = results
+
+        if verbose:
+            for i, gap in enumerate(gaps):
+                print(f"Instance {i + 1}/{len(gaps)}: gap = {gap:.2f}%")
+
+        return gaps
+
+    # Sequential evaluation (fallback)
     model.eval()
     gaps = []
 

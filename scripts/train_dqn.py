@@ -116,13 +116,20 @@ def run_training(
             instance_ids=size_train_ids,
         )
 
-        # Evaluate on test set
+        # Evaluate on test set (parallel if workers > 1)
         test_avg_gap = None
         test_std_gap = None
         if size_test_ids:
             test_dataset = TSPDataset(dataset_path, size_test_ids)
             test_instances = list(test_dataset)
-            test_gaps = evaluate_dqn(model, test_instances, config, verbose=False)
+            test_gaps = evaluate_dqn(
+                model,
+                test_instances,
+                config,
+                verbose=False,
+                dataset_path=dataset_path,
+                instance_ids=size_test_ids,
+            )
             test_avg_gap = float(np.mean(test_gaps))
             test_std_gap = float(np.std(test_gaps))
             if verbose:
