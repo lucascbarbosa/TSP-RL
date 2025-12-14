@@ -24,9 +24,12 @@ from glob import glob
 from src.rl.dqn import load_model, compute_q_matrix, N_ACTIONS, ACTION_DECODE
 from utils import (
     plot_learning_curve,
+    plot_action_distribution,
     plot_q_values_heatmap,
     plot_gap_violins_by_size_method,
+    plot_time_vs_gap_scatter,
     load_gaps_by_type_method,
+    load_results_by_type,
 )
 
 
@@ -77,7 +80,8 @@ def run_plots(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     action_labels = generate_action_labels()
-    generated = {"learning_curves": [], "heatmaps": [], "violins": []}
+    action_labels_list = [action_labels.get(i, f"A{i}") for i in range(N_ACTIONS)]
+    generated = {"learning_curves": [], "action_dists": [], "heatmaps": [], "violins": [], "scatters": []}
 
     # Find model files
     model_paths = sorted(glob(models_pattern))
@@ -108,6 +112,20 @@ def run_plots(
                     save_path=plot_path,
                 )
                 generated["learning_curves"].append(str(plot_path))
+                if verbose:
+                    print(f"  Saved: {plot_path}")
+
+            if "action_counts" in stats:
+                # Convert string keys to int (JSON serializes dict keys as strings)
+                action_counts = {int(k): v for k, v in stats["action_counts"].items()}
+                plot_path = output_dir / f"{name}_action_dist.png"
+                plot_action_distribution(
+                    action_counts,
+                    action_labels=action_labels_list,
+                    title=f"Action Distribution: {name}",
+                    save_path=plot_path,
+                )
+                generated["action_dists"].append(str(plot_path))
                 if verbose:
                     print(f"  Saved: {plot_path}")
 
@@ -156,6 +174,24 @@ def run_plots(
                 generated["violins"].append(str(plot_path))
                 if verbose:
                     print(f"  Saved: {plot_path}")
+
+            # Time vs Gap scatter plots (one per type)
+            all_results = load_results_by_type(result_files)
+
+            for instance_type, data_by_size in all_results.items():
+                if not data_by_size:
+                    continue
+
+                plot_path = output_dir / f"{instance_type}_time_vs_gap.png"
+                plot_time_vs_gap_scatter(
+                    data_by_size,
+                    title=f"Time vs Gap: {instance_type}",
+                    save_path=plot_path,
+                )
+                generated["scatters"].append(str(plot_path))
+                if verbose:
+                    print(f"  Saved: {plot_path}")
+
         except Exception as e:
             if verbose:
                 print(f"  Error loading results: {e}")

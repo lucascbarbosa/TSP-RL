@@ -147,6 +147,7 @@ def run_training(
             "episode_best_gaps": stats.episode_best_gaps,
             "episode_rewards": stats.episode_rewards,
             "losses": stats.losses,
+            "action_counts": {str(k): v for k, v in stats.action_counts.items()},
         }
         with open(stats_path, "w") as f:
             json.dump(stats_dict, f, indent=2)

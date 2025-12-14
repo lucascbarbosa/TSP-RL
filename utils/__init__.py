@@ -1,51 +1,27 @@
 """Utility functions for TSP-RL."""
 
 from utils.plot import (
-    # Style
     COLORS,
     setup_style,
-    # Results loading
-    load_gaps_from_csv,
     load_gaps_by_type_method,
-    load_results_from_csv,
-    generate_gap_violin_plots,
-    # DQN training
+    load_results_by_type,
     plot_learning_curve,
     plot_action_distribution,
     plot_q_values_heatmap,
-    # Results analysis
-    plot_gap_distribution,
-    plot_gap_by_size,
-    plot_gap_violins_by_size,
     plot_gap_violins_by_size_method,
-    plot_gap_comparison,
-    # TSP visualization
-    plot_tour,
-    # Time analysis
-    plot_gap_and_time_violins,
     plot_time_vs_gap_scatter,
-    plot_suboptimal_time_analysis,
-    generate_time_analysis_plots,
+    plot_tour,
 )
 
 __all__ = [
     "COLORS",
     "setup_style",
-    "load_gaps_from_csv",
     "load_gaps_by_type_method",
-    "load_results_from_csv",
-    "generate_gap_violin_plots",
+    "load_results_by_type",
     "plot_learning_curve",
     "plot_action_distribution",
     "plot_q_values_heatmap",
-    "plot_gap_distribution",
-    "plot_gap_by_size",
-    "plot_gap_violins_by_size",
     "plot_gap_violins_by_size_method",
-    "plot_gap_comparison",
-    "plot_tour",
-    "plot_gap_and_time_violins",
     "plot_time_vs_gap_scatter",
-    "plot_suboptimal_time_analysis",
-    "generate_time_analysis_plots",
+    "plot_tour",
 ]

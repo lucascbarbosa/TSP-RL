@@ -68,6 +68,7 @@ class TrainingStats:
     episode_lengths: list[int] = field(default_factory=list)
     losses: list[float] = field(default_factory=list)
     epsilons: list[float] = field(default_factory=list)
+    action_counts: dict[int, int] = field(default_factory=lambda: {i: 0 for i in range(N_ACTIONS)})
 
 
 def compute_time_budget(n: int, base_budget: float = 10.0) -> float:
@@ -116,6 +117,7 @@ def _episode_worker(args: tuple) -> dict:
 
     state = env.reset()
     transitions = []
+    actions_taken = []
     episode_reward = 0.0
     done = False
 
@@ -134,7 +136,7 @@ def _episode_worker(args: tuple) -> dict:
         # Execute action
         next_state, reward, done = env.step(action)
 
-        # Store transition
+        # Store transition and action
         transitions.append(
             (
                 state.to_numpy(),
@@ -144,12 +146,14 @@ def _episode_worker(args: tuple) -> dict:
                 done,
             )
         )
+        actions_taken.append(action)
 
         episode_reward += reward
         state = next_state
 
     return {
         "transitions": transitions,
+        "actions": actions_taken,
         "reward": episode_reward,
         "best_gap": env.best_gap,
         "steps": len(transitions),
@@ -252,6 +256,9 @@ def _train_dqn_sequential(
                 next_state.to_numpy(),
                 done,
             )
+
+            # Track action
+            stats.action_counts[action] += 1
 
             episode_reward += reward
             episode_steps += 1
@@ -374,6 +381,10 @@ def _train_dqn_parallel(
             # Add transitions to buffer
             for transition in result["transitions"]:
                 replay_buffer.push(*transition)
+
+            # Track actions
+            for action in result["actions"]:
+                stats.action_counts[action] += 1
 
             # Record stats
             stats.episode_rewards.append(result["reward"])
