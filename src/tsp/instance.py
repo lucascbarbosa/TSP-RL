@@ -286,6 +286,7 @@ class TSPDataset:
         json_file_path: Union[str, Path],
         active_indices: list[int],
         edge_weight_type: Optional[str] = None,
+        verbose: bool = True,
     ) -> None:
         """
         Initialize dataset.
@@ -294,14 +295,17 @@ class TSPDataset:
             json_file_path: Path to JSON file with instances.
             active_indices: List of instance IDs to include (e.g., train IDs).
             edge_weight_type: Distance metric (inferred from path if None).
+            verbose: Print loading messages (default True, set False for workers).
         """
         self.path = str(json_file_path)
         self.indices = active_indices
         self.edge_weight_type = edge_weight_type or _infer_edge_weight_type(json_file_path)
 
-        print(f"Loading {json_file_path} into memory...")
+        if verbose:
+            print(f"Loading {json_file_path} into memory...")
         self.data_in_memory = _load_json(json_file_path)
-        print(f"Loaded {len(self.data_in_memory)} raw instances. Active subset: {len(self.indices)}")
+        if verbose:
+            print(f"Loaded {len(self.data_in_memory)} raw instances. Active subset: {len(self.indices)}")
 
     def __len__(self) -> int:
         return len(self.indices)

@@ -6,6 +6,7 @@ from utils.plot import (
     setup_style,
     # Results loading
     load_gaps_from_csv,
+    load_gaps_by_type_method,
     load_results_from_csv,
     generate_gap_violin_plots,
     # DQN training
@@ -16,6 +17,7 @@ from utils.plot import (
     plot_gap_distribution,
     plot_gap_by_size,
     plot_gap_violins_by_size,
+    plot_gap_violins_by_size_method,
     plot_gap_comparison,
     # TSP visualization
     plot_tour,
@@ -30,6 +32,7 @@ __all__ = [
     "COLORS",
     "setup_style",
     "load_gaps_from_csv",
+    "load_gaps_by_type_method",
     "load_results_from_csv",
     "generate_gap_violin_plots",
     "plot_learning_curve",
@@ -38,6 +41,7 @@ __all__ = [
     "plot_gap_distribution",
     "plot_gap_by_size",
     "plot_gap_violins_by_size",
+    "plot_gap_violins_by_size_method",
     "plot_gap_comparison",
     "plot_tour",
     "plot_gap_and_time_violins",

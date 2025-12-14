@@ -101,7 +101,7 @@ def _episode_worker(args: tuple) -> dict:
 
     # Load instance
     instance_id = instance_ids[instance_idx % len(instance_ids)]
-    dataset = TSPDataset(dataset_path, [instance_id])
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
 
     # Create network and load weights
@@ -501,8 +501,6 @@ def compute_q_matrix(
     model: QNetwork,
     gap_levels: list[float] | None = None,
     t_ratio: float = 0.5,
-    n_actions: int = N_ACTIONS,
-    history_len: int = 2,
 ) -> np.ndarray:
     """
     Compute Q-values for discretized gap levels.
@@ -511,17 +509,19 @@ def compute_q_matrix(
     states with varying gap levels. Useful for visualizing learned policy.
 
     Args:
-        model: Trained Q-network.
+        model: Trained Q-network (n_actions and history_len inferred from model).
         gap_levels: Gap percentages to evaluate (default: [0, 1, 2, 5, 10, 20, 50]).
         t_ratio: Fixed time ratio for states (default: 0.5).
-        n_actions: Number of actions (default: 21).
-        history_len: History length (default: 2).
 
     Returns:
         Matrix of shape (len(gap_levels), n_actions) with Q-values.
     """
     if gap_levels is None:
         gap_levels = [0, 1, 2, 5, 10, 20, 50]
+
+    # Infer from model attributes
+    n_actions = model.n_actions
+    history_len = (model.state_dim - 3) // n_actions
 
     # Normalize gaps using same function as DQNState
     def normalize_gap(gap: float) -> float:

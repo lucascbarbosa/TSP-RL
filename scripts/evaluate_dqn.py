@@ -94,7 +94,7 @@ def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, fl
 # Worker functions for parallel evaluation
 def _eval_worker_dqn(args: tuple) -> dict:
     instance_id, dataset_path, model_path, time_budget = args
-    dataset = TSPDataset(dataset_path, [instance_id])
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
     model = load_model(model_path)
     history_len = (model.state_dim - 3) // N_ACTIONS
@@ -105,7 +105,7 @@ def _eval_worker_dqn(args: tuple) -> dict:
 
 def _eval_worker_baseline(args: tuple) -> dict:
     instance_id, dataset_path, time_budget = args
-    dataset = TSPDataset(dataset_path, [instance_id])
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
     gap, elapsed, iters = evaluate_baseline_grasp(instance, time_budget)
     return {"instance_id": instance_id, "method": "GRASP+2opt", "gap": gap, "time": elapsed, "iterations": iters}

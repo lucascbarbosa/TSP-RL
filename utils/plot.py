@@ -99,6 +99,36 @@ def load_gaps_from_csv(
     return {t: dict(sizes) for t, sizes in gaps_by_type_size.items()}
 
 
+def load_gaps_by_type_method(
+    csv_paths: List[Union[str, Path]],
+) -> Dict[str, Dict[str, Dict[int, List[float]]]]:
+    """
+    Load and aggregate gap data from multiple CSV files.
+
+    Args:
+        csv_paths: List of paths to results CSV files.
+
+    Returns:
+        Nested dict: {instance_type: {method: {size: [gaps]}}}
+        Example: {"EUC_2D": {"DQN-ILS": {10: [0.1, ...], 20: [...]}, "GRASP+2opt": {...}}}
+    """
+    data: Dict[str, Dict[str, Dict[int, List[float]]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
+    for csv_path in csv_paths:
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                instance_type = row["Type"]
+                method = row["Method"]
+                dimension = int(row["Dimension"])
+                gap_str = row["Gap"].replace("%", "")
+                gap_value = float(gap_str)
+                data[instance_type][method][dimension].append(gap_value)
+
+    # Convert to regular dicts
+    return {t: {m: dict(sizes) for m, sizes in methods.items()} for t, methods in data.items()}
+
+
 def load_results_from_csv(
     csv_path: Union[str, Path],
 ) -> Dict[str, Dict[int, Dict[str, List[float]]]]:
@@ -582,6 +612,102 @@ def plot_gap_violins_by_size(
     legend_elements = [
         Line2D([0], [0], color=COLORS["secondary"], linewidth=1.5, label="Mean"),
         Line2D([0], [0], color=COLORS["tertiary"], linewidth=1.5, label="Median"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_gap_violins_by_size_method(
+    gaps_by_method: Dict[str, Dict[int, List[float]]],
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot gap distributions with sizes on X-axis and methods side by side.
+
+    Creates grouped violin plots where each size has one violin per method.
+
+    Args:
+        gaps_by_method: Dict mapping method -> {size: [gaps]}.
+            Example: {"DQN-ILS": {10: [...], 20: [...]}, "GRASP+2opt": {...}}
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    methods = sorted(gaps_by_method.keys())
+    all_sizes = set()
+    for method_data in gaps_by_method.values():
+        all_sizes.update(method_data.keys())
+    sizes = sorted(all_sizes)
+
+    if not sizes or not methods:
+        return
+
+    n_methods = len(methods)
+    n_sizes = len(sizes)
+    width = 0.35
+    method_colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+
+    fig_width = max(8, n_sizes * 1.5 + 2)
+    fig, ax = plt.subplots(figsize=(fig_width, 5))
+
+    for m_idx, method in enumerate(methods):
+        method_data = gaps_by_method.get(method, {})
+        positions = []
+        data = []
+
+        for s_idx, size in enumerate(sizes):
+            gaps = method_data.get(size, [])
+            if gaps:
+                # Position: center at s_idx, offset by method index
+                offset = (m_idx - (n_methods - 1) / 2) * width
+                positions.append(s_idx + offset)
+                data.append(gaps)
+
+        if not data:
+            continue
+
+        color = method_colors[m_idx % len(method_colors)]
+        parts = ax.violinplot(
+            data,
+            positions=positions,
+            showmeans=True,
+            showmedians=False,
+            widths=width * 0.9,
+        )
+
+        for pc in parts["bodies"]:
+            pc.set_facecolor(color)
+            pc.set_edgecolor(color)
+            pc.set_alpha(0.6)
+
+        parts["cmeans"].set_color(color)
+        parts["cmeans"].set_linewidth(2)
+        for partname in ["cbars", "cmins", "cmaxes"]:
+            parts[partname].set_color(color)
+            parts[partname].set_linewidth(1)
+
+    ax.set_xticks(range(n_sizes))
+    ax.set_xticklabels([str(s) for s in sizes])
+    ax.set_xlabel("Instance Size (n)")
+    ax.set_ylabel("Gap (%)")
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+
+    # Legend
+    from matplotlib.patches import Patch
+
+    legend_elements = [
+        Patch(facecolor=method_colors[i % len(method_colors)], alpha=0.6, label=m) for i, m in enumerate(methods)
     ]
     ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
 

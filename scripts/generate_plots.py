@@ -25,8 +25,8 @@ from src.rl.dqn import load_model, compute_q_matrix, N_ACTIONS, ACTION_DECODE
 from utils import (
     plot_learning_curve,
     plot_q_values_heatmap,
-    plot_gap_violins_by_size,
-    load_gaps_from_csv,
+    plot_gap_violins_by_size_method,
+    load_gaps_by_type_method,
 )
 
 
@@ -114,10 +114,9 @@ def run_plots(
         # Q-values heatmap
         try:
             model = load_model(model_path)
-            history_len = (model.state_dim - 3) // N_ACTIONS
-            q_matrix = compute_q_matrix(model, N_ACTIONS, history_len)
+            q_matrix = compute_q_matrix(model)
             gap_labels = ["0%", "1%", "2%", "5%", "10%", "20%", "50%"]
-            act_labels = [action_labels.get(i, f"A{i}") for i in range(N_ACTIONS)]
+            act_labels = [action_labels.get(i, f"A{i}") for i in range(model.n_actions)]
 
             plot_path = output_dir / f"{name}_q_heatmap.png"
             plot_q_values_heatmap(
@@ -134,27 +133,24 @@ def run_plots(
             if verbose:
                 print(f"  Error generating Q-heatmap: {e}")
 
-    # Evaluation plots (gap distributions)
+    # Evaluation plots (gap distributions) - one plot per type with all sizes
     result_files = sorted(glob(results_pattern))
     if verbose:
         print(f"\nFound {len(result_files)} result file(s)")
 
-    for result_path in result_files:
-        result_path = Path(result_path)
-        name = result_path.stem
-
-        if verbose:
-            print(f"\nProcessing: {name}")
-
+    if result_files:
         try:
-            gaps_data = load_gaps_from_csv(result_path)
-            for instance_type, gaps_by_size in gaps_data.items():
-                if not gaps_by_size:
+            # Aggregate all results by type and method
+            all_gaps = load_gaps_by_type_method(result_files)
+
+            for instance_type, gaps_by_method in all_gaps.items():
+                if not gaps_by_method:
                     continue
-                plot_path = output_dir / f"{name}_violins.png"
-                plot_gap_violins_by_size(
-                    gaps_by_size,
-                    title=f"Gap Distribution: {name}",
+
+                plot_path = output_dir / f"{instance_type}_gaps_violin.png"
+                plot_gap_violins_by_size_method(
+                    gaps_by_method,
+                    title=f"Gap Distribution: {instance_type}",
                     save_path=plot_path,
                 )
                 generated["violins"].append(str(plot_path))
@@ -162,7 +158,7 @@ def run_plots(
                     print(f"  Saved: {plot_path}")
         except Exception as e:
             if verbose:
-                print(f"  Error: {e}")
+                print(f"  Error loading results: {e}")
 
     if verbose:
         print(f"\nPlots saved to: {output_dir}/")
