@@ -38,8 +38,27 @@ EVAL_LIMIT=20               # Limit evaluation instances per size
 # Evaluation
 BASELINE=true               # Include GRASP+2opt baseline (same time budget as DQN)
 
-# Device
+# Device and parallelization
 DEVICE="cpu"                # "cpu" or "cuda"
+WORKERS=16                  # Parallel workers (n_cpus - 2 recommended)
+
+# =============================================================================
+# Helper functions
+# =============================================================================
+
+format_duration() {
+    local seconds=$1
+    local hours=$((seconds / 3600))
+    local minutes=$(((seconds % 3600) / 60))
+    local secs=$((seconds % 60))
+    if [[ $hours -gt 0 ]]; then
+        printf "%dh %dm %ds" $hours $minutes $secs
+    elif [[ $minutes -gt 0 ]]; then
+        printf "%dm %ds" $minutes $secs
+    else
+        printf "%ds" $secs
+    fi
+}
 
 # =============================================================================
 # Parse command line arguments (override defaults)
@@ -95,6 +114,10 @@ while [[ $# -gt 0 ]]; do
             DEVICE="$2"
             shift 2
             ;;
+        --workers)
+            WORKERS="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -111,6 +134,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --eval_limit N        Limit evaluation instances (default: $EVAL_LIMIT)"
             echo "  --baseline true|false Include baseline comparison (default: $BASELINE)"
             echo "  --device cpu|cuda     Device for training (default: $DEVICE)"
+            echo "  --workers N           Parallel workers (default: $WORKERS)"
             exit 0
             ;;
         *)
@@ -133,9 +157,14 @@ if [[ ! -f "CLAUDE.md" ]] || [[ ! -d "src" ]]; then
     exit 1
 fi
 
+# Record start time
+PIPELINE_START=$SECONDS
+PIPELINE_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
 echo "========================================"
 echo "DQN-ILS Pipeline"
 echo "========================================"
+echo "Started at: $PIPELINE_START_TIME"
 echo "Project root: $PROJECT_ROOT"
 echo ""
 echo "Configuration:"
@@ -151,6 +180,7 @@ echo "  Train limit: ${TRAIN_LIMIT:-\"(no limit)\"}"
 echo "  Eval limit:  ${EVAL_LIMIT:-\"(no limit)\"}"
 echo "  Baseline:    $BASELINE"
 echo "  Device:      $DEVICE"
+echo "  Workers:     $WORKERS"
 echo ""
 
 # =============================================================================
@@ -161,12 +191,17 @@ echo "========================================"
 echo "1. Checking splits..."
 echo "========================================"
 
+STEP1_START=$SECONDS
+
 if [[ -f "data/splits.json" ]]; then
     echo "   data/splits.json exists, skipping generation."
 else
     echo "   Generating splits..."
     python scripts/generate_splits.py --seed 42 --train_ratio 0.9
 fi
+
+STEP1_DURATION=$((SECONDS - STEP1_START))
+echo "   Duration: $(format_duration $STEP1_DURATION)"
 echo ""
 
 # =============================================================================
@@ -177,13 +212,23 @@ echo "========================================"
 echo "2. Training DQN models..."
 echo "========================================"
 
+STEP2_START=$SECONDS
+
 # Build limit argument
 LIMIT_ARG=""
 if [[ -n "$TRAIN_LIMIT" ]]; then
     LIMIT_ARG="--limit $TRAIN_LIMIT"
 fi
 
+# Count models to train
+N_TYPES=$(echo $TYPES | wc -w)
+N_SIZES=$(echo $SIZES | wc -w)
+N_MODELS=$((N_TYPES * N_SIZES))
+echo "   Models to train: $N_MODELS ($N_TYPES types × $N_SIZES sizes)"
+
+TRAINED=0
 for TYPE in $TYPES; do
+    TYPE_START=$SECONDS
     echo ""
     echo "--- Training $TYPE ---"
     python scripts/train_dqn.py \
@@ -196,8 +241,16 @@ for TYPE in $TYPES; do
         --hidden_dim "$HIDDEN_DIM" \
         --history_len "$HISTORY_LEN" \
         --device "$DEVICE" \
+        --workers "$WORKERS" \
         $LIMIT_ARG
+    TYPE_DURATION=$((SECONDS - TYPE_START))
+    TRAINED=$((TRAINED + N_SIZES))
+    echo "   $TYPE complete: $(format_duration $TYPE_DURATION) ($TRAINED/$N_MODELS models)"
 done
+
+STEP2_DURATION=$((SECONDS - STEP2_START))
+echo ""
+echo "   Training total: $(format_duration $STEP2_DURATION)"
 echo ""
 
 # =============================================================================
@@ -207,6 +260,8 @@ echo ""
 echo "========================================"
 echo "3. Evaluating models..."
 echo "========================================"
+
+STEP3_START=$SECONDS
 
 # Build limit and baseline arguments
 EVAL_LIMIT_ARG=""
@@ -220,6 +275,7 @@ if [[ "$BASELINE" == "true" ]]; then
 fi
 
 for TYPE in $TYPES; do
+    TYPE_START=$SECONDS
     echo ""
     echo "--- Evaluating $TYPE ---"
     python scripts/evaluate_dqn.py \
@@ -228,9 +284,16 @@ for TYPE in $TYPES; do
         --history_len "$HISTORY_LEN" \
         --hidden_dim "$HIDDEN_DIM" \
         --device "$DEVICE" \
+        --workers "$WORKERS" \
         $EVAL_LIMIT_ARG \
         $BASELINE_ARG
+    TYPE_DURATION=$((SECONDS - TYPE_START))
+    echo "   $TYPE evaluation: $(format_duration $TYPE_DURATION)"
 done
+
+STEP3_DURATION=$((SECONDS - STEP3_START))
+echo ""
+echo "   Evaluation total: $(format_duration $STEP3_DURATION)"
 echo ""
 
 # =============================================================================
@@ -241,20 +304,38 @@ echo "========================================"
 echo "4. Generating plots..."
 echo "========================================"
 
+STEP4_START=$SECONDS
+
 python scripts/generate_plots.py \
     --models "models/dqn/*.pt" \
     --results "data/results/*.csv" \
     --history_len "$HISTORY_LEN" \
     --hidden_dim "$HIDDEN_DIM"
+
+STEP4_DURATION=$((SECONDS - STEP4_START))
+echo "   Duration: $(format_duration $STEP4_DURATION)"
 echo ""
 
 # =============================================================================
 # Done
 # =============================================================================
 
+PIPELINE_DURATION=$((SECONDS - PIPELINE_START))
+PIPELINE_END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+
 echo "========================================"
 echo "Pipeline complete!"
 echo "========================================"
+echo ""
+echo "Timing summary:"
+echo "  Started:    $PIPELINE_START_TIME"
+echo "  Finished:   $PIPELINE_END_TIME"
+echo "  Total time: $(format_duration $PIPELINE_DURATION)"
+echo ""
+echo "  Step 1 (splits):     $(format_duration $STEP1_DURATION)"
+echo "  Step 2 (training):   $(format_duration $STEP2_DURATION)"
+echo "  Step 3 (evaluation): $(format_duration $STEP3_DURATION)"
+echo "  Step 4 (plots):      $(format_duration $STEP4_DURATION)"
 echo ""
 echo "Outputs:"
 echo "  Models:  models/dqn/"

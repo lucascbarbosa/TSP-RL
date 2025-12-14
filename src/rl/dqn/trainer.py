@@ -1,6 +1,8 @@
 """DQN training and evaluation functions."""
 
+import os
 import random
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -13,7 +15,13 @@ from torch.optim import Adam
 from src.rl.dqn.buffer import ReplayBuffer
 from src.rl.dqn.env import DQNEnv, N_ACTIONS
 from src.rl.dqn.network import QNetwork
-from src.tsp.instance import TSPInstance
+from src.tsp.instance import TSPInstance, TSPDataset
+
+
+def get_default_workers() -> int:
+    """Get default number of workers (n_cpus - 2, minimum 1)."""
+    n_cpus = os.cpu_count() or 1
+    return max(1, n_cpus - 2)
 
 
 @dataclass
@@ -47,6 +55,9 @@ class DQNConfig:
     # Device
     device: str = "cpu"
 
+    # Parallelization
+    n_workers: int = 1  # Number of parallel workers (1 = sequential)
+
 
 @dataclass
 class TrainingStats:
@@ -75,18 +86,96 @@ def compute_time_budget(n: int, base_budget: float = 10.0) -> float:
     return (n / 100) ** 2 * base_budget
 
 
+# Worker function for parallel training (must be top-level for pickling)
+def _episode_worker(args: tuple) -> dict:
+    """
+    Run a single episode and return transitions.
+
+    Args:
+        args: Tuple of (instance_idx, dataset_path, instance_ids, weights, config_dict)
+
+    Returns:
+        Dictionary with transitions, reward, best_gap, and steps.
+    """
+    instance_idx, dataset_path, instance_ids, weights, config_dict = args
+
+    # Load instance
+    instance_id = instance_ids[instance_idx % len(instance_ids)]
+    dataset = TSPDataset(dataset_path, [instance_id])
+    instance = next(iter(dataset))
+
+    # Create network and load weights
+    state_dim = 3 + config_dict["history_len"] * N_ACTIONS
+    q_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config_dict["hidden_dim"])
+    q_net.load_state_dict(weights)
+    q_net.eval()
+
+    # Run episode
+    time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
+    env = DQNEnv(instance, time_budget, config_dict["history_len"])
+
+    state = env.reset()
+    transitions = []
+    episode_reward = 0.0
+    done = False
+
+    epsilon = config_dict["epsilon"]
+
+    while not done:
+        # Epsilon-greedy action selection
+        if random.random() < epsilon:
+            action = random.randrange(N_ACTIONS)
+        else:
+            with torch.no_grad():
+                state_tensor = torch.tensor(state.to_numpy(), dtype=torch.float32)
+                q_values = q_net(state_tensor)
+                action = int(q_values.argmax().item())
+
+        # Execute action
+        next_state, reward, done = env.step(action)
+
+        # Store transition
+        transitions.append(
+            (
+                state.to_numpy(),
+                action,
+                reward,
+                next_state.to_numpy(),
+                done,
+            )
+        )
+
+        episode_reward += reward
+        state = next_state
+
+    return {
+        "transitions": transitions,
+        "reward": episode_reward,
+        "best_gap": env.best_gap,
+        "steps": len(transitions),
+    }
+
+
 def train_dqn(
     instances: list[TSPInstance],
     config: DQNConfig,
     verbose: bool = True,
+    dataset_path: str | None = None,
+    instance_ids: list[int] | None = None,
 ) -> tuple[QNetwork, TrainingStats]:
     """
     Train DQN on a set of TSP instances.
+
+    Supports parallel training when config.n_workers > 1. In parallel mode,
+    dataset_path and instance_ids must be provided so workers can load
+    instances independently.
 
     Args:
         instances: List of training instances.
         config: Training configuration.
         verbose: Print progress information.
+        dataset_path: Path to dataset JSON (required for parallel training).
+        instance_ids: List of instance IDs (required for parallel training).
 
     Returns:
         Tuple of (trained Q-network, training statistics).
@@ -94,6 +183,22 @@ def train_dqn(
     if not instances:
         raise ValueError("No instances provided")
 
+    # Check parallel requirements
+    if config.n_workers > 1:
+        if dataset_path is None or instance_ids is None:
+            raise ValueError("Parallel training (n_workers > 1) requires dataset_path and instance_ids")
+        return _train_dqn_parallel(instances, config, verbose, dataset_path, instance_ids)
+
+    # Sequential training (original implementation)
+    return _train_dqn_sequential(instances, config, verbose)
+
+
+def _train_dqn_sequential(
+    instances: list[TSPInstance],
+    config: DQNConfig,
+    verbose: bool = True,
+) -> tuple[QNetwork, TrainingStats]:
+    """Sequential DQN training (single worker)."""
     # Infer instance size from first instance
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
@@ -193,6 +298,129 @@ def train_dqn(
             avg_gap = np.mean(recent_gaps)
             print(
                 f"Episode {episode + 1}/{config.n_episodes} | "
+                f"Avg gap (last 100): {avg_gap:.2f}% | "
+                f"ε: {epsilon:.3f}"
+            )
+
+    return q_net, stats
+
+
+def _train_dqn_parallel(
+    instances: list[TSPInstance],
+    config: DQNConfig,
+    verbose: bool,
+    dataset_path: str,
+    instance_ids: list[int],
+) -> tuple[QNetwork, TrainingStats]:
+    """
+    Parallel DQN training using batch episodes.
+
+    Runs multiple episodes in parallel, aggregates transitions, then updates.
+    """
+    n = instances[0].dimension
+    time_budget = compute_time_budget(n, config.time_budget)
+    state_dim = 3 + config.history_len * N_ACTIONS
+    n_workers = config.n_workers
+
+    if verbose:
+        print(f"Training DQN (parallel): n={n}, time_budget={time_budget:.2f}s")
+        print(f"State dim: {state_dim}, Actions: {N_ACTIONS}, Episodes: {config.n_episodes}")
+        print(f"Using {n_workers} parallel workers")
+
+    # Initialize networks
+    q_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
+    target_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
+    target_net.load_state_dict(q_net.state_dict())
+    target_net.eval()
+
+    optimizer = Adam(q_net.parameters(), lr=config.lr)
+    replay_buffer = ReplayBuffer(config.buffer_size)
+
+    stats = TrainingStats()
+    epsilon = config.epsilon_start
+
+    # Calculate number of batches
+    n_batches = (config.n_episodes + n_workers - 1) // n_workers
+    episode_counter = 0
+
+    for batch_idx in range(n_batches):
+        # How many episodes in this batch
+        episodes_in_batch = min(n_workers, config.n_episodes - episode_counter)
+        if episodes_in_batch <= 0:
+            break
+
+        # Prepare worker arguments
+        weights = {k: v.cpu() for k, v in q_net.state_dict().items()}
+        config_dict = {
+            "time_budget": config.time_budget,
+            "history_len": config.history_len,
+            "hidden_dim": config.hidden_dim,
+            "epsilon": epsilon,
+        }
+
+        worker_args = [
+            (episode_counter + i, dataset_path, instance_ids, weights, config_dict) for i in range(episodes_in_batch)
+        ]
+
+        # Run episodes in parallel
+        batch_results = []
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = [executor.submit(_episode_worker, args) for args in worker_args]
+            for future in as_completed(futures):
+                batch_results.append(future.result())
+
+        # Aggregate results
+        for result in batch_results:
+            # Add transitions to buffer
+            for transition in result["transitions"]:
+                replay_buffer.push(*transition)
+
+            # Record stats
+            stats.episode_rewards.append(result["reward"])
+            stats.episode_best_gaps.append(result["best_gap"])
+            stats.episode_lengths.append(result["steps"])
+            stats.epsilons.append(epsilon)
+
+            episode_counter += 1
+
+        # Update network (if buffer has enough samples)
+        if len(replay_buffer) >= config.min_buffer_size:
+            # More updates for larger batches
+            n_updates = config.updates_per_episode * episodes_in_batch
+            for _ in range(n_updates):
+                batch = replay_buffer.sample(config.batch_size, config.device)
+
+                # Compute Q(s, a)
+                q_values = q_net(batch.states)
+                q_selected = q_values.gather(1, batch.actions).squeeze(1)
+
+                # Compute target: r + γ max Q_target(s', a')
+                with torch.no_grad():
+                    next_q = target_net(batch.next_states).max(dim=1)[0]
+                    targets = batch.rewards + config.gamma * next_q * (1 - batch.dones)
+
+                # Update
+                loss = F.mse_loss(q_selected, targets)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                stats.losses.append(loss.item())
+
+        # Decay epsilon (once per batch, scaled by batch size)
+        for _ in range(episodes_in_batch):
+            epsilon = max(config.epsilon_end, epsilon * config.epsilon_decay)
+
+        # Update target network
+        if episode_counter % config.target_update_freq < episodes_in_batch:
+            target_net.load_state_dict(q_net.state_dict())
+
+        # Progress logging
+        if verbose and (episode_counter % 100 < episodes_in_batch or episode_counter == config.n_episodes):
+            recent_gaps = stats.episode_best_gaps[-100:]
+            avg_gap = np.mean(recent_gaps)
+            print(
+                f"Episode {episode_counter}/{config.n_episodes} | "
                 f"Avg gap (last 100): {avg_gap:.2f}% | "
                 f"ε: {epsilon:.3f}"
             )
@@ -322,5 +550,6 @@ __all__ = [
     "save_model",
     "load_model",
     "compute_q_matrix",
+    "get_default_workers",
     "N_ACTIONS",
 ]

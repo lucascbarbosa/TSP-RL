@@ -21,7 +21,7 @@ import json
 
 import numpy as np
 
-from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model, N_ACTIONS
+from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model, N_ACTIONS, get_default_workers
 from src.tsp.instance import TSPDataset
 
 
@@ -99,6 +99,12 @@ def main() -> None:
         choices=["cpu", "cuda"],
         help="Device for training (default: cpu)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=f"Parallel workers for training (default: 1, max recommended: {get_default_workers()})",
+    )
 
     parser.add_argument(
         "--output_dir",
@@ -165,10 +171,17 @@ def main() -> None:
             lr=args.lr,
             hidden_dim=args.hidden_dim,
             device=args.device,
+            n_workers=args.workers,
         )
 
-        # Train
-        model, stats = train_dqn(train_instances, config, verbose=True)
+        # Train (pass dataset info for parallel training)
+        model, stats = train_dqn(
+            train_instances,
+            config,
+            verbose=True,
+            dataset_path=dataset_path,
+            instance_ids=size_train_ids,
+        )
 
         # Evaluate on test set
         if test_instances:
