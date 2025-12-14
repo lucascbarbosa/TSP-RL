@@ -174,7 +174,7 @@ class DQNEnv:
 
         # Check if done (time budget exhausted or optimal found)
         elapsed = time.perf_counter() - self.t_start
-        done = elapsed >= self.time_budget or self.best_gap <= 1e-8
+        done = bool(elapsed >= self.time_budget or self.best_gap <= 1e-8)
 
         return self._get_state(), reward, done
 
