@@ -78,11 +78,10 @@ def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float,
 
     elapsed = time.perf_counter() - t0
 
-    # Compute gap (vs optimal if available, else vs initial baseline)
-    if opt_cost is not None:
-        gap = ((best_cost - opt_cost) / opt_cost) * 100
-    else:
-        gap = ((best_cost - instance.baseline_cost) / instance.baseline_cost) * 100
+    # Compute gap vs optimal (required for evaluation instances)
+    if opt_cost is None:
+        raise ValueError(f"Instance {instance.name} has no opt_cost. Evaluation requires known optimal.")
+    gap = ((best_cost - opt_cost) / opt_cost) * 100
 
     return gap, elapsed, iterations, best_cost
 
@@ -123,17 +122,12 @@ def evaluate_dqn_instance(
 
     elapsed = time.perf_counter() - t0
 
-    # Report gap relative to optimal (not baseline) for fair comparison
+    # Report gap vs optimal (required for evaluation instances)
     best_cost = env.solution.cost
     opt_cost = instance.opt_cost
-    if opt_cost is not None:
-        gap = ((best_cost - opt_cost) / opt_cost) * 100
-    else:
-        # If no optimal available, report relative to baseline
-        gap = ((best_cost - instance.baseline_cost) / instance.baseline_cost) * 100
-
-    # Update baseline if we found a better solution (improves future evaluations)
-    instance.update_baseline_cost(best_cost)
+    if opt_cost is None:
+        raise ValueError(f"Instance {instance.name} has no opt_cost. Evaluation requires known optimal.")
+    gap = ((best_cost - opt_cost) / opt_cost) * 100
 
     return gap, elapsed, iterations, best_cost
 
@@ -157,7 +151,7 @@ def _eval_worker(args: tuple) -> list[dict]:
 
     # Always run baseline first to establish reference (full time budget)
     bl_gap, bl_elapsed, bl_iters, bl_best_cost = evaluate_baseline_grasp(instance, time_budget)
-    instance.update_baseline_cost(bl_best_cost)
+    instance.set_baseline_cost(bl_best_cost)
 
     # Only report baseline if requested
     if report_baseline:

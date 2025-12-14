@@ -266,30 +266,32 @@ class TSPInstance:
         else:
             self.opt_cost = None
 
-        # Baseline cost (lazy, computed on first access)
+        # Baseline cost (must be set explicitly via set_baseline_cost)
         self._baseline_cost: Optional[float] = None
-        self.instance_id = instance_id  # Store for reproducible baseline
 
     @property
     def baseline_cost(self) -> float:
         """
-        Baseline solution cost (GRASP + 2-opt, computed once and cached).
+        Baseline solution cost (reference for evaluation without opt_cost).
 
-        Uses instance_id as seed for reproducibility. This provides a reference
-        cost that can be computed for any instance (doesn't require known optimal).
-
-        Can be updated if a better solution is found (see update_baseline_cost).
+        Must be set explicitly via set_baseline_cost() before access.
+        In evaluation, this is set by running the baseline competitor (GRASP+2opt
+        with time budget) before the DQN agent.
         """
         if self._baseline_cost is None:
-            self._baseline_cost = self._compute_baseline()
+            raise ValueError(
+                f"baseline_cost not set for {self.name}. "
+                "Call set_baseline_cost() first (e.g., after running baseline competitor)."
+            )
         return self._baseline_cost
+
+    def set_baseline_cost(self, cost: float) -> None:
+        """Set baseline cost (used as reference when opt_cost unavailable)."""
+        self._baseline_cost = cost
 
     def update_baseline_cost(self, new_cost: float) -> bool:
         """
         Update baseline_cost if new_cost is better.
-
-        This allows improving the baseline reference over time as better
-        solutions are found, providing more accurate state representations.
 
         Args:
             new_cost: Cost of a newly found solution.
@@ -297,30 +299,10 @@ class TSPInstance:
         Returns:
             True if baseline was updated, False otherwise.
         """
-        current = self.baseline_cost  # Ensure computed
-        if new_cost < current:
+        if self._baseline_cost is None or new_cost < self._baseline_cost:
             self._baseline_cost = new_cost
             return True
         return False
-
-    def _compute_baseline(self) -> float:
-        """Compute baseline cost using GRASP(α=0.1) + 2-opt full."""
-        # Import here to avoid circular dependency
-        from src.tsp.constructive import grasp
-        from src.tsp.local_search import two_opt_full
-        from src.tsp.solution import Solution
-
-        # Use instance_id as seed for reproducibility
-        rng_state = random.getstate()
-        random.seed(self.instance_id)
-
-        try:
-            tour, _ = grasp(self, alpha=0.1)
-            sol = Solution(tour, self.dist_matrix, is_closed=True)
-            improved = two_opt_full(sol)
-            return improved.cost
-        finally:
-            random.setstate(rng_state)
 
     def get_nodes(self) -> range:
         """Node indices {1, ..., n}."""

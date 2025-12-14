@@ -46,6 +46,25 @@ reward = g_best_old - g_best_new
 - Alinha o sinal de recompensa com o objetivo real (minimizar gap)
 - Sparse mas informativo
 
+### Referência para o Gap: Treino vs Avaliação
+
+O gap é calculado como `(custo_atual - referência) / referência × 100%`. A escolha da **referência** difere entre treino e avaliação para evitar vazamento de informação privilegiada:
+
+| Contexto | Referência p/ Estado | Gap Reportado | Justificativa |
+|----------|---------------------|---------------|---------------|
+| **Treino** | `opt_cost` | `opt_cost` | Sinal de supervisão limpo |
+| **Avaliação** | `baseline_cost` | `opt_cost`* | Simula deploy real |
+
+\* Se `opt_cost` não disponível, reporta vs `baseline_cost`.
+
+**Motivação:** Em um cenário real de deploy, não conhecemos o custo ótimo da instância. Para demonstrar que o método funciona sem essa informação privilegiada:
+
+1. **Treino**: O modelo aprende usando `opt_cost` como referência — isso é aceitável pois os dados de treino têm soluções ótimas conhecidas (resolvidas por MIP ou heurísticas exatas).
+
+2. **Avaliação**: O modelo recebe estados baseados em `baseline_cost`, simulando deploy onde o ótimo é desconhecido. O gap *reportado* ainda usa `opt_cost` para métrica comparável com a literatura.
+
+**Cálculo do baseline:** Na avaliação, o baseline competidor (GRASP+2opt) roda com o mesmo time budget do DQN, selecionando α aleatoriamente de {0.03, 0.1, 0.3} a cada iteração — os mesmos valores disponíveis ao agente DQN. O `baseline_cost` da instância é atualizado se uma solução melhor for encontrada, garantindo referência de alta qualidade para o estado do DQN.
+
 ### Ações (16)
 
 Cada ação é um par **(perturbação, busca local)**. Baseado em análise empírica de modelos treinados, removemos operadores pouco usados (two_opt_nn ~4%, random) e adicionamos GRASP parametrizado.

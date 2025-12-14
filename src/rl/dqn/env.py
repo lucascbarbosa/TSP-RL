@@ -116,16 +116,19 @@ class DQNEnv:
         # Reference cost for gap/state calculation
         if use_baseline:
             # Use baseline (GRASP+2opt) as reference - doesn't need privileged info
+            # baseline_cost must be set before creating env (e.g., by running baseline competitor)
             self.reference_cost = instance.baseline_cost
         else:
-            # Use optimal cost if available, otherwise baseline
+            # Use optimal cost (training mode - requires known optimal)
             opt_tour = instance.opt_tour
-            if opt_tour:
-                self.reference_cost = sum(
-                    instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
+            if not opt_tour:
+                raise ValueError(
+                    f"Instance {instance.name} has no opt_tour. "
+                    "Training requires instances with known optimal, or use use_baseline=True."
                 )
-            else:
-                self.reference_cost = instance.baseline_cost
+            self.reference_cost = sum(
+                instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
+            )
 
         # Keep opt_cost for reporting (if available)
         self.opt_cost = instance.opt_cost
