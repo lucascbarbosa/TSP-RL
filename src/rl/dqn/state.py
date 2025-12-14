@@ -94,7 +94,7 @@ class DQNState:
         return np.array(base + history_onehot, dtype=np.float32)
 
     @staticmethod
-    def dim(history_len: int = 2, n_actions: int = 21) -> int:
+    def dim(history_len: int = 1, n_actions: int = 16) -> int:
         """
         Get state vector dimension.
 
