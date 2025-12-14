@@ -4,7 +4,8 @@ Evaluate trained DQN models on test instances.
 
 Supports:
 - Evaluating single or multiple models (glob patterns)
-- Comparing with GRASP+2opt baseline (5 restarts)
+- Comparing with GRASP+2opt baseline (time-based)
+- Parallel evaluation using multiple CPU cores
 - Generating CSV results for analysis
 
 Usage:
@@ -17,10 +18,14 @@ Usage:
     # Evaluate with baseline comparison
     python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --baseline
 
+    # Parallel evaluation with 16 workers
+    python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --workers 16
+
     # Limit instances for quick testing
     python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --limit 10
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +37,7 @@ import csv
 import json
 import re
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from glob import glob
 
 import numpy as np
@@ -42,6 +48,12 @@ from src.tsp.instance import TSPDataset
 from src.tsp.local_search import two_opt_full
 from src.tsp.constructive import grasp
 from src.tsp.solution import Solution
+
+
+def get_default_workers() -> int:
+    """Get default number of workers (n_cpus - 2, minimum 1)."""
+    n_cpus = os.cpu_count() or 1
+    return max(1, n_cpus - 2)
 
 
 def parse_model_name(model_path: str) -> tuple[str, int]:
@@ -129,6 +141,70 @@ def evaluate_dqn_instance(model, instance, config: DQNConfig) -> tuple[float, fl
     return env.best_gap, elapsed, iterations
 
 
+# Worker functions for parallel evaluation (must be top-level for pickling)
+
+
+def _eval_worker_dqn(args: tuple) -> dict:
+    """
+    Worker function for parallel DQN evaluation.
+
+    Args:
+        args: Tuple of (instance_id, dataset_path, model_path, config_dict)
+
+    Returns:
+        Dictionary with evaluation results.
+    """
+    instance_id, dataset_path, model_path, config_dict = args
+
+    # Load instance
+    dataset = TSPDataset(dataset_path, [instance_id])
+    instance = next(iter(dataset))
+
+    # Recreate config and load model (each worker loads its own copy)
+    config = DQNConfig(**config_dict)
+    state_dim = 3 + config.history_len * N_ACTIONS
+    model = load_model(model_path, state_dim=state_dim, hidden_dim=config_dict.get("hidden_dim", 64))
+
+    # Evaluate
+    gap, elapsed, iters = evaluate_dqn_instance(model, instance, config)
+
+    return {
+        "instance_id": instance_id,
+        "method": "DQN-ILS",
+        "gap": gap,
+        "time": elapsed,
+        "iterations": iters,
+    }
+
+
+def _eval_worker_baseline(args: tuple) -> dict:
+    """
+    Worker function for parallel baseline evaluation.
+
+    Args:
+        args: Tuple of (instance_id, dataset_path, time_budget)
+
+    Returns:
+        Dictionary with evaluation results.
+    """
+    instance_id, dataset_path, time_budget = args
+
+    # Load instance
+    dataset = TSPDataset(dataset_path, [instance_id])
+    instance = next(iter(dataset))
+
+    # Evaluate baseline
+    gap, elapsed, iters = evaluate_baseline_grasp(instance, time_budget)
+
+    return {
+        "instance_id": instance_id,
+        "method": "GRASP+2opt",
+        "gap": gap,
+        "time": elapsed,
+        "iterations": iters,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate trained DQN models")
 
@@ -186,8 +262,17 @@ def main() -> None:
         choices=["cpu", "cuda"],
         help="Device for evaluation",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=f"Number of parallel workers (default: n_cpus-2 = {get_default_workers()})",
+    )
 
     args = parser.parse_args()
+
+    # Set number of workers
+    n_workers = args.workers if args.workers is not None else get_default_workers()
 
     # Find model files
     model_paths = sorted(glob(args.model))
@@ -217,15 +302,6 @@ def main() -> None:
 
         print(f"Type: {instance_type}, Size: {size}")
 
-        # Load model
-        state_dim = 3 + args.history_len * N_ACTIONS
-        model = load_model(
-            model_path,
-            state_dim=state_dim,
-            n_actions=N_ACTIONS,
-            hidden_dim=args.hidden_dim,
-        )
-
         # Get test instances
         dataset_path = f"data/{instance_type}.json"
         if dataset_path in splits:
@@ -247,56 +323,77 @@ def main() -> None:
             continue
 
         print(f"Test instances: {len(size_test_ids)}")
+        print(f"Using {n_workers} parallel workers")
 
-        # Load instances
-        dataset = TSPDataset(dataset_path, size_test_ids)
-        instances = list(dataset)
-
-        # Config for evaluation
-        config = DQNConfig(
-            time_budget=args.time_budget,
-            history_len=args.history_len,
-            device=args.device,
-        )
-
-        # Evaluate
-        results = []
+        # Config dict for workers (must be serializable)
+        config_dict = {
+            "time_budget": args.time_budget,
+            "history_len": args.history_len,
+            "device": args.device,
+            "hidden_dim": args.hidden_dim,
+        }
         time_budget = compute_time_budget(size, args.time_budget)
 
-        for i, instance in enumerate(instances):
-            if (i + 1) % 10 == 0 or i == 0:
-                print(f"  Instance {i + 1}/{len(instances)}...", end="\r")
+        # Prepare worker arguments
+        dqn_args = [(inst_id, dataset_path, model_path, config_dict) for inst_id in size_test_ids]
 
-            # DQN evaluation
-            gap, elapsed, iters = evaluate_dqn_instance(model, instance, config)
-            results.append(
-                {
-                    "Type": instance_type,
-                    "Dimension": size,
-                    "Instance": size_test_ids[i],
-                    "Method": "DQN-ILS",
-                    "Gap": f"{gap:.4f}%",
-                    "Time (s)": f"{elapsed:.3f}",
-                    "Iterations": iters,
-                }
-            )
+        # Parallel DQN evaluation
+        results = []
+        completed = 0
+        total = len(size_test_ids)
 
-            # Baseline evaluation
-            if args.baseline:
-                gap_bl, time_bl, iters_bl = evaluate_baseline_grasp(instance, time_budget)
+        print(f"  Evaluating DQN-ILS...")
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            futures = {executor.submit(_eval_worker_dqn, arg): arg[0] for arg in dqn_args}
+
+            for future in as_completed(futures):
+                result = future.result()
+                completed += 1
+                if completed % 10 == 0 or completed == total:
+                    print(f"    {completed}/{total} instances...", end="\r")
+
                 results.append(
                     {
                         "Type": instance_type,
                         "Dimension": size,
-                        "Instance": size_test_ids[i],
-                        "Method": "GRASP+2opt",
-                        "Gap": f"{gap_bl:.4f}%",
-                        "Time (s)": f"{time_bl:.3f}",
-                        "Iterations": iters_bl,
+                        "Instance": result["instance_id"],
+                        "Method": result["method"],
+                        "Gap": f"{result['gap']:.4f}%",
+                        "Time (s)": f"{result['time']:.3f}",
+                        "Iterations": result["iterations"],
                     }
                 )
 
         print()  # Clear progress line
+
+        # Parallel baseline evaluation
+        if args.baseline:
+            baseline_args = [(inst_id, dataset_path, time_budget) for inst_id in size_test_ids]
+
+            completed = 0
+            print(f"  Evaluating GRASP+2opt baseline...")
+            with ProcessPoolExecutor(max_workers=n_workers) as executor:
+                futures = {executor.submit(_eval_worker_baseline, arg): arg[0] for arg in baseline_args}
+
+                for future in as_completed(futures):
+                    result = future.result()
+                    completed += 1
+                    if completed % 10 == 0 or completed == total:
+                        print(f"    {completed}/{total} instances...", end="\r")
+
+                    results.append(
+                        {
+                            "Type": instance_type,
+                            "Dimension": size,
+                            "Instance": result["instance_id"],
+                            "Method": result["method"],
+                            "Gap": f"{result['gap']:.4f}%",
+                            "Time (s)": f"{result['time']:.3f}",
+                            "Iterations": result["iterations"],
+                        }
+                    )
+
+            print()  # Clear progress line
 
         # Save results
         output_dir = Path("data/results")
