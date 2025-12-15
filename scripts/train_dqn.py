@@ -33,6 +33,7 @@ def run_training(
     device: str = "cpu",
     workers: int = 1,
     train_limit: int | None = None,
+    val_limit: int | None = None,
     output_dir: str = "models/dqn",
     verbose: bool = True,
     compare_variants: bool = False,
@@ -43,7 +44,7 @@ def run_training(
     Args:
         inst_type: Instance type (EUC_2D, ATT, GEO).
         sizes: List of instance sizes to train.
-        splits: Dictionary with train/test splits.
+        splits: Dictionary with train/val/test splits.
         episodes: Number of training episodes.
         time_budget: Base time budget in seconds.
         gamma: Discount factor.
@@ -53,6 +54,7 @@ def run_training(
         device: Device for training (cpu/cuda).
         workers: Number of parallel workers.
         train_limit: Limit training instances per size (None = no limit).
+        val_limit: Limit validation instances per size (None = no limit).
         output_dir: Output directory for models.
         verbose: Print progress.
         compare_variants: If True, train both DQN and Double DQN for comparison.
@@ -70,7 +72,8 @@ def run_training(
         return {}
 
     train_ids = splits[dataset_path]["train"]
-    test_ids = splits[dataset_path]["test"]
+    # Use 'val' if available (train/val/test split), fallback to 'test' for compatibility
+    val_ids = splits[dataset_path].get("val", splits[dataset_path].get("test", []))
     results = {}
 
     for size in sizes:
@@ -78,10 +81,12 @@ def run_training(
         size_start = (size // 10 - 1) * 1111
         size_end = (size // 10) * 1111
         size_train_ids = [i for i in train_ids if size_start <= i < size_end]
-        size_test_ids = [i for i in test_ids if size_start <= i < size_end]
+        size_val_ids = [i for i in val_ids if size_start <= i < size_end]
 
         if train_limit:
             size_train_ids = size_train_ids[:train_limit]
+        if val_limit:
+            size_val_ids = size_val_ids[:val_limit]
 
         if not size_train_ids:
             if verbose:
@@ -91,16 +96,16 @@ def run_training(
         if verbose:
             print(f"\nTraining {inst_type} n={size}")
             print(f"  Train instances: {len(size_train_ids)}")
-            print(f"  Test instances: {len(size_test_ids)}")
+            print(f"  Val instances: {len(size_val_ids)}")
 
         # Load instances
         train_dataset = TSPDataset(dataset_path, size_train_ids)
         train_instances = list(train_dataset)
 
-        test_instances = []
-        if size_test_ids:
-            test_dataset = TSPDataset(dataset_path, size_test_ids)
-            test_instances = list(test_dataset)
+        val_instances = []
+        if size_val_ids:
+            val_dataset = TSPDataset(dataset_path, size_val_ids)
+            val_instances = list(val_dataset)
 
         # Define variants to train
         if compare_variants:
@@ -140,28 +145,28 @@ def run_training(
                 instance_ids=size_train_ids,
             )
 
-            # Evaluate on test set (parallel if workers > 1)
+            # Evaluate on validation set (parallel if workers > 1)
             # Returns (gaps_vs_base, gaps_vs_opt): unsupervised and supervised gaps
-            test_avg_gap = None
-            test_std_gap = None
-            test_avg_gap_unsup = None
-            test_gaps = []
-            test_gaps_unsup = []
-            if test_instances:
-                test_gaps_unsup, test_gaps = evaluate_dqn(
+            val_avg_gap = None
+            val_std_gap = None
+            val_avg_gap_unsup = None
+            val_gaps = []
+            val_gaps_unsup = []
+            if val_instances:
+                val_gaps_unsup, val_gaps = evaluate_dqn(
                     model,
-                    test_instances,
+                    val_instances,
                     config,
                     verbose=False,
                     dataset_path=dataset_path,
-                    instance_ids=size_test_ids,
+                    instance_ids=size_val_ids,
                 )
-                test_avg_gap = float(np.mean(test_gaps))
-                test_std_gap = float(np.std(test_gaps))
-                test_avg_gap_unsup = float(np.mean(test_gaps_unsup))
+                val_avg_gap = float(np.mean(val_gaps))
+                val_std_gap = float(np.std(val_gaps))
+                val_avg_gap_unsup = float(np.mean(val_gaps_unsup))
                 if verbose:
                     print(
-                        f"  Test: Supervised={test_avg_gap:.2f}% ± {test_std_gap:.2f}%, Unsupervised={test_avg_gap_unsup:.2f}%"
+                        f"  Val: Supervised={val_avg_gap:.2f}% ± {val_std_gap:.2f}%, Unsupervised={val_avg_gap_unsup:.2f}%"
                     )
 
             # Determine filename suffix
@@ -189,11 +194,11 @@ def run_training(
                 "hidden_dim": hidden_dim,
                 "time_budget": time_budget,
                 "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
-                "test_avg_gap": test_avg_gap,  # supervised (vs optimal)
-                "test_std_gap": test_std_gap,
-                "test_avg_gap_unsup": test_avg_gap_unsup,  # unsupervised (vs baseline)
-                "test_gaps": test_gaps,
-                "test_gaps_unsup": test_gaps_unsup,
+                "val_avg_gap": val_avg_gap,  # supervised (vs optimal)
+                "val_std_gap": val_std_gap,
+                "val_avg_gap_unsup": val_avg_gap_unsup,  # unsupervised (vs baseline)
+                "val_gaps": val_gaps,
+                "val_gaps_unsup": val_gaps_unsup,
                 "episode_best_gaps": stats.episode_best_gaps,
                 "episode_rewards": stats.episode_rewards,
                 "episode_lengths": stats.episode_lengths,
@@ -210,7 +215,7 @@ def run_training(
                 "model_path": str(model_path),
                 "stats_path": str(stats_path),
                 "final_avg_gap": stats_dict["final_avg_gap"],
-                "test_avg_gap": test_avg_gap,
+                "val_avg_gap": val_avg_gap,
                 "use_double_dqn": use_double,
             }
 
@@ -229,7 +234,8 @@ def main() -> None:
     parser.add_argument("--type", type=str, required=True, choices=["EUC_2D", "ATT", "GEO"])
     parser.add_argument("--sizes", type=int, nargs="+", default=[50])
     parser.add_argument("--split_path", type=str, default="data/splits.json")
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--limit", type=int, default=None, help="Limit train instances per size")
+    parser.add_argument("--val_limit", type=int, default=None, help="Limit validation instances per size")
     parser.add_argument("--episodes", type=int, default=2000)
     parser.add_argument("--time_budget", type=float, default=10.0)
     parser.add_argument("--gamma", type=float, default=0.99)
@@ -265,6 +271,7 @@ def main() -> None:
         device=args.device,
         workers=args.workers,
         train_limit=args.limit,
+        val_limit=args.val_limit,
         output_dir=args.output_dir,
     )
 

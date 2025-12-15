@@ -169,7 +169,7 @@ def run_grouped_evaluation(
     splits: dict,
     time_budget: float = 10.0,
     workers: int = 1,
-    eval_limit: int | None = None,
+    test_limit: int | None = None,
     report_baseline: bool = False,
     output_dir: str = "data/results",
     verbose: bool = True,
@@ -189,7 +189,7 @@ def run_grouped_evaluation(
         splits: Dictionary with train/test splits.
         time_budget: Base time budget in seconds.
         workers: Number of parallel workers.
-        eval_limit: Limit test instances (None = no limit).
+        test_limit: Limit test instances (None = no limit).
         report_baseline: Include baseline results in output CSV.
         output_dir: Output directory for results.
         verbose: Print progress.
@@ -210,8 +210,8 @@ def run_grouped_evaluation(
     size_end = (size // 10) * 1111
     size_test_ids = [i for i in test_ids if size_start <= i < size_end]
 
-    if eval_limit:
-        size_test_ids = size_test_ids[:eval_limit]
+    if test_limit:
+        size_test_ids = size_test_ids[:test_limit]
 
     if not size_test_ids:
         if verbose:
@@ -319,7 +319,7 @@ def run_evaluation(
     splits: dict,
     time_budget: float = 10.0,
     workers: int = 1,
-    eval_limit: int | None = None,
+    test_limit: int | None = None,
     baseline: bool = False,
     output_dir: str = "data/results",
     verbose: bool = True,
@@ -334,7 +334,7 @@ def run_evaluation(
         splits: Dictionary with train/test splits.
         time_budget: Base time budget in seconds.
         workers: Number of parallel workers.
-        eval_limit: Limit test instances (None = no limit).
+        test_limit: Limit test instances (None = no limit).
         baseline: Include GRASP+2opt baseline comparison in results.
         output_dir: Output directory for results.
         verbose: Print progress.
@@ -365,7 +365,7 @@ def run_evaluation(
         splits=splits,
         time_budget=time_budget,
         workers=workers,
-        eval_limit=eval_limit,
+        test_limit=test_limit,
         report_baseline=baseline,
         output_dir=output_dir,
         verbose=verbose,
@@ -431,7 +431,7 @@ def main() -> None:
             splits=splits,
             time_budget=args.time_budget,
             workers=n_workers,
-            eval_limit=args.limit,
+            test_limit=args.limit,
             report_baseline=args.baseline,
         )
 

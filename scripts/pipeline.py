@@ -36,7 +36,8 @@ class PipelineConfig:
     hidden_dim: int = 64
     history_len: int = 1
     train_limit: int = 100
-    eval_limit: int = 50
+    val_limit: int = 40  # Validation instances during training (step 2)
+    test_limit: int = 40  # Test instances for final evaluation (step 3)
     baseline: bool = True
     device: str = "cpu"
     workers: int = 16
@@ -82,7 +83,8 @@ def main():
     parser.add_argument("--hidden_dim", type=int, default=64)
     parser.add_argument("--history_len", type=int, default=1)
     parser.add_argument("--train_limit", type=int, default=100)
-    parser.add_argument("--eval_limit", type=int, default=20)
+    parser.add_argument("--val_limit", type=int, default=40, help="Validation instances during training (step 2)")
+    parser.add_argument("--test_limit", type=int, default=40, help="Test instances for final evaluation (step 3)")
     parser.add_argument("--no_baseline", action="store_true")
     parser.add_argument("--no_compare_double", action="store_true", help="Skip DQN vs Double DQN comparison")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
@@ -99,7 +101,8 @@ def main():
         hidden_dim=args.hidden_dim,
         history_len=args.history_len,
         train_limit=args.train_limit,
-        eval_limit=args.eval_limit,
+        val_limit=args.val_limit,
+        test_limit=args.test_limit,
         baseline=not args.no_baseline,
         compare_double=not args.no_compare_double,
         device=args.device,
@@ -124,12 +127,12 @@ def main():
 
     timings = {}
 
-    # Step 1: Generate splits
+    # Step 1: Generate splits (train/val/test)
     def step_splits():
         if Path("data/splits.json").exists():
             print("   data/splits.json exists, skipping.")
             return
-        run_generate_splits()
+        run_generate_splits(with_val=True)
 
     timings["splits"], _ = run_step("1. Generating splits", step_splits)
 
@@ -137,7 +140,7 @@ def main():
     with open("data/splits.json") as f:
         splits = json.load(f)
 
-    # Step 2: Train models
+    # Step 2: Train models (uses train + val sets)
     # If compare_double is True, trains both DQN and Double DQN variants
     def step_train():
         for inst_type in config.types:
@@ -154,12 +157,13 @@ def main():
                 device=config.device,
                 workers=config.workers,
                 train_limit=config.train_limit,
+                val_limit=config.val_limit,
                 compare_variants=config.compare_double,
             )
 
     timings["training"], _ = run_step("2. Training models", step_train)
 
-    # Step 3: Evaluate models (baseline computed once per instance group)
+    # Step 3: Evaluate models on test set (baseline computed once per instance group)
     def step_evaluate():
         for inst_type in config.types:
             for size in config.sizes:
@@ -186,7 +190,7 @@ def main():
                     splits=splits,
                     time_budget=config.time_budget,
                     workers=config.workers,
-                    eval_limit=config.eval_limit,
+                    test_limit=config.test_limit,
                     report_baseline=config.baseline,
                 )
 

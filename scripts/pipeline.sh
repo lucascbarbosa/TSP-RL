@@ -21,7 +21,8 @@ LR=0.001
 HIDDEN_DIM=64
 HISTORY_LEN=1
 TRAIN_LIMIT=100
-EVAL_LIMIT=20
+VAL_LIMIT=40
+TEST_LIMIT=40
 BASELINE=""
 COMPARE_DOUBLE=""
 DEVICE="cpu"
@@ -39,7 +40,8 @@ while [[ $# -gt 0 ]]; do
         --hidden_dim)   HIDDEN_DIM="$2"; shift 2 ;;
         --history_len)  HISTORY_LEN="$2"; shift 2 ;;
         --train_limit)  TRAIN_LIMIT="$2"; shift 2 ;;
-        --eval_limit)   EVAL_LIMIT="$2"; shift 2 ;;
+        --val_limit)    VAL_LIMIT="$2"; shift 2 ;;
+        --test_limit)   TEST_LIMIT="$2"; shift 2 ;;
         --no_baseline)  BASELINE="--no_baseline"; shift ;;
         --no_compare_double) COMPARE_DOUBLE="--no_compare_double"; shift ;;
         --device)       DEVICE="$2"; shift 2 ;;
@@ -63,7 +65,8 @@ exec python scripts/pipeline.py \
     --hidden_dim "$HIDDEN_DIM" \
     --history_len "$HISTORY_LEN" \
     --train_limit "$TRAIN_LIMIT" \
-    --eval_limit "$EVAL_LIMIT" \
+    --val_limit "$VAL_LIMIT" \
+    --test_limit "$TEST_LIMIT" \
     --device "$DEVICE" \
     --workers "$WORKERS" \
     $BASELINE \
