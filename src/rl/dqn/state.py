@@ -7,28 +7,37 @@ import numpy as np
 
 def normalize_gap(gap: float) -> float:
     """
-    Normalize gap percentage to [0, ~1] scale using log transform.
+    Normalize gap percentage to [-1, 1] scale using symmetric log transform.
 
     Log transform compresses large gaps while preserving resolution
     for small gaps (which matter more for optimization).
 
+    Supports negative gaps (when solution beats the reference, e.g., baseline).
+
     Args:
-        gap: Gap percentage (e.g., 5.0 for 5%).
+        gap: Gap percentage (e.g., 5.0 for 5%, -3.0 for -3%).
 
     Returns:
-        Normalized value in [0, ~1]. gap=0% → 0.0, gap=100% → 1.0.
+        Normalized value in [-1, 1]. gap=-100% → -1.0, gap=0% → 0.0, gap=100% → 1.0.
 
     Examples:
         >>> normalize_gap(0.0)
         0.0
-        >>> 0.6 < normalize_gap(5.0) < 0.7  # ~0.65
+        >>> 0.38 < normalize_gap(5.0) < 0.40  # ~0.39
         True
         >>> 0.99 < normalize_gap(100.0) < 1.01  # ~1.0
         True
+        >>> -0.40 < normalize_gap(-5.0) < -0.38  # ~-0.39
+        True
     """
+    # Symmetric log transform: handles both positive and negative gaps
     # log1p(x) = log(1 + x), numerically stable for small x
-    # Scale: gap=0% → 0.0, gap=100% → 1.0
-    return float(np.log1p(gap) / np.log1p(100))
+    # Scale: gap=-100% → -1.0, gap=0% → 0.0, gap=100% → 1.0
+    if gap >= 0:
+        return float(np.log1p(gap) / np.log1p(100))
+    else:
+        # Mirror transformation for negative gaps
+        return float(-np.log1p(-gap) / np.log1p(100))
 
 
 def compute_delta_reward(g_best_old: float, g_best_new: float) -> float:

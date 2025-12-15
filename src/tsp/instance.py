@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
@@ -264,6 +265,44 @@ class TSPInstance:
                     )
         else:
             self.opt_cost = None
+
+        # Baseline cost (must be set explicitly via set_baseline_cost)
+        self._baseline_cost: Optional[float] = None
+
+    @property
+    def baseline_cost(self) -> float:
+        """
+        Baseline solution cost (reference for evaluation without opt_cost).
+
+        Must be set explicitly via set_baseline_cost() before access.
+        In evaluation, this is set by running the baseline competitor (GRASP+2opt
+        with time budget) before the DQN agent.
+        """
+        if self._baseline_cost is None:
+            raise ValueError(
+                f"baseline_cost not set for {self.name}. "
+                "Call set_baseline_cost() first (e.g., after running baseline competitor)."
+            )
+        return self._baseline_cost
+
+    def set_baseline_cost(self, cost: float) -> None:
+        """Set baseline cost (used as reference when opt_cost unavailable)."""
+        self._baseline_cost = cost
+
+    def update_baseline_cost(self, new_cost: float) -> bool:
+        """
+        Update baseline_cost if new_cost is better.
+
+        Args:
+            new_cost: Cost of a newly found solution.
+
+        Returns:
+            True if baseline was updated, False otherwise.
+        """
+        if self._baseline_cost is None or new_cost < self._baseline_cost:
+            self._baseline_cost = new_cost
+            return True
+        return False
 
     def get_nodes(self) -> range:
         """Node indices {1, ..., n}."""
