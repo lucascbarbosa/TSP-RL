@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.optim import Adam
 
 from src.rl.dqn.buffer import ReplayBuffer
-from src.rl.dqn.env import DQNEnv, N_ACTIONS
+from src.rl.dqn.env import DQNEnv
 from src.rl.dqn.network import QNetwork
 from src.tsp.instance import TSPInstance
 
@@ -22,7 +22,7 @@ class DQNConfig:
 
     # Environment
     time_budget: float = 10.0  # Base time budget (scales with n)
-    history_len: int = 2  # Number of past actions in state
+    history_len: int = 3  # Number of past actions in state
 
     # DQN hyperparameters
     gamma: float = 0.99  # Discount factor
@@ -97,15 +97,15 @@ def train_dqn(
     # Infer instance size from first instance
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
-    state_dim = 3 + config.history_len * N_ACTIONS
+    state_dim = 3 + config.history_len * 9
 
     if verbose:
         print(f"Training DQN: n={n}, time_budget={time_budget:.2f}s")
-        print(f"State dim: {state_dim}, Actions: {N_ACTIONS}, Episodes: {config.n_episodes}")
+        print(f"State dim: {state_dim}, Episodes: {config.n_episodes}")
 
     # Initialize networks
-    q_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
-    target_net = QNetwork(state_dim, n_actions=N_ACTIONS, hidden_dim=config.hidden_dim).to(config.device)
+    q_net = QNetwork(state_dim, hidden_dim=config.hidden_dim).to(config.device)
+    target_net = QNetwork(state_dim, hidden_dim=config.hidden_dim).to(config.device)
     target_net.load_state_dict(q_net.state_dict())
     target_net.eval()
 
@@ -250,67 +250,12 @@ def save_model(model: QNetwork, path: str | Path) -> None:
     torch.save(model.state_dict(), path)
 
 
-def load_model(
-    path: str | Path,
-    state_dim: int,
-    n_actions: int = N_ACTIONS,
-    hidden_dim: int = 64,
-) -> QNetwork:
+def load_model(path: str | Path, state_dim: int, hidden_dim: int = 64) -> QNetwork:
     """Load model weights from file."""
-    model = QNetwork(state_dim, n_actions=n_actions, hidden_dim=hidden_dim)
+    model = QNetwork(state_dim, hidden_dim=hidden_dim)
     model.load_state_dict(torch.load(path, weights_only=True))
     model.eval()
     return model
-
-
-def compute_q_matrix(
-    model: QNetwork,
-    gap_levels: list[float] | None = None,
-    t_ratio: float = 0.5,
-    n_actions: int = N_ACTIONS,
-    history_len: int = 2,
-) -> np.ndarray:
-    """
-    Compute Q-values for discretized gap levels.
-
-    Creates a matrix of Q-values by querying the network at synthetic
-    states with varying gap levels. Useful for visualizing learned policy.
-
-    Args:
-        model: Trained Q-network.
-        gap_levels: Gap percentages to evaluate (default: [0, 1, 2, 5, 10, 20, 50]).
-        t_ratio: Fixed time ratio for states (default: 0.5).
-        n_actions: Number of actions (default: 21).
-        history_len: History length (default: 2).
-
-    Returns:
-        Matrix of shape (len(gap_levels), n_actions) with Q-values.
-    """
-    if gap_levels is None:
-        gap_levels = [0, 1, 2, 5, 10, 20, 50]
-
-    # Normalize gaps using same function as DQNState
-    def normalize_gap(gap: float) -> float:
-        return float(np.log1p(gap) / np.log1p(100))
-
-    q_matrix = np.zeros((len(gap_levels), n_actions))
-
-    model.eval()
-    with torch.no_grad():
-        for i, gap in enumerate(gap_levels):
-            # Create state: g=g_best=gap, t_ratio fixed, empty history
-            g_norm = normalize_gap(gap)
-            state = [g_norm, g_norm, t_ratio]
-
-            # Empty history (one-hot with no action selected)
-            for _ in range(history_len):
-                state.extend([0.0] * n_actions)
-
-            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
-            q_values = model(state_tensor).squeeze(0).numpy()
-            q_matrix[i, :] = q_values
-
-    return q_matrix
 
 
 __all__ = [
@@ -321,6 +266,4 @@ __all__ = [
     "compute_time_budget",
     "save_model",
     "load_model",
-    "compute_q_matrix",
-    "N_ACTIONS",
 ]

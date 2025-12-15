@@ -1,4 +1,4 @@
-"""DQN environment wrapper for TSP operators."""
+"""DQN environment wrapper for Q-ILS operators."""
 
 import random
 import time
@@ -7,12 +7,26 @@ from typing import Optional
 import numpy as np
 
 from src.rl.dqn.state import DQNState, normalize_gap, compute_delta_reward
+
+
+# Action decoding (local copy to avoid circular import with q_ils)
+# Maps action index to (perturbation, local_search) pair
+ACTION_DECODE: dict[int, tuple[str, str]] = {
+    0: ("two_swap", "two_opt"),
+    1: ("two_swap", "lin_kernighan"),
+    2: ("segment_reverse", "two_opt"),
+    3: ("segment_reverse", "lin_kernighan"),
+    4: ("random", "two_opt"),
+    5: ("nearest", "two_opt"),
+    6: ("cheapest", "two_opt"),
+    7: ("nearest", "lin_kernighan"),
+    8: ("grasp", "two_opt"),
+}
+N_ACTIONS = len(ACTION_DECODE)
 from src.tsp.constructive import CONSTRUCTIVES
 from src.tsp.instance import TSPInstance
 from src.tsp.local_search import (
-    two_opt_full,
-    two_opt_nn,
-    two_opt_dlb,
+    two_opt,
     lin_kernighan,
     _build_neighbor_lists,
     _resolve_k,
@@ -20,45 +34,6 @@ from src.tsp.local_search import (
 )
 from src.tsp.perturbation import PERTURBATIONS
 from src.tsp.solution import Solution
-
-
-# Action decoding: maps action index to (perturbation, local_search) pair
-# Expanded to expose individual 2-opt variants (full/nn/dlb) as separate actions
-# This allows the agent to learn which variant is best for each situation
-ACTION_DECODE: dict[int, tuple[str, str]] = {
-    # Light perturbations with all local searches
-    0: ("two_swap", "two_opt_full"),
-    1: ("two_swap", "two_opt_nn"),
-    2: ("two_swap", "two_opt_dlb"),
-    3: ("two_swap", "lin_kernighan"),
-    4: ("segment_reverse", "two_opt_full"),
-    5: ("segment_reverse", "two_opt_nn"),
-    6: ("segment_reverse", "two_opt_dlb"),
-    7: ("segment_reverse", "lin_kernighan"),
-    # Destructive perturbations (constructives) with 2-opt variants
-    8: ("random", "two_opt_full"),
-    9: ("random", "two_opt_nn"),
-    10: ("random", "two_opt_dlb"),
-    11: ("nearest", "two_opt_full"),
-    12: ("nearest", "two_opt_nn"),
-    13: ("nearest", "two_opt_dlb"),
-    14: ("nearest", "lin_kernighan"),  # Restart + intensification
-    15: ("cheapest", "two_opt_full"),
-    16: ("cheapest", "two_opt_nn"),
-    17: ("cheapest", "two_opt_dlb"),
-    18: ("grasp", "two_opt_full"),
-    19: ("grasp", "two_opt_nn"),
-    20: ("grasp", "two_opt_dlb"),
-}
-N_ACTIONS = len(ACTION_DECODE)
-
-# Local search dispatch
-LOCAL_SEARCH_DISPATCH = {
-    "two_opt_full": two_opt_full,
-    "two_opt_nn": two_opt_nn,
-    "two_opt_dlb": two_opt_dlb,
-    "lin_kernighan": lin_kernighan,
-}
 
 
 class DQNEnv:
@@ -78,7 +53,7 @@ class DQNEnv:
         self,
         instance: TSPInstance,
         time_budget: float,
-        history_len: int = 2,
+        history_len: int = 3,
         k: int | float = 0.5,
     ) -> None:
         """
@@ -131,7 +106,7 @@ class DQNEnv:
         constructive = random.choice(list(CONSTRUCTIVES.keys()))
         tour, _ = CONSTRUCTIVES[constructive](self.instance)
         self.solution = Solution(tour, self.dist_matrix, is_closed=True)
-        self.solution = two_opt_dlb(self.solution, neighbors=self._neighbors)
+        self.solution = two_opt(self.solution, neighbors=self._neighbors)
 
         # Initialize tracking
         gap = ((self.solution.cost - self.opt_cost) / self.opt_cost) * 100
@@ -191,7 +166,6 @@ class DQNEnv:
             g_best=normalize_gap(self.best_gap),
             t_ratio=t_ratio,
             history=tuple(self.history),
-            n_actions=N_ACTIONS,
         )
 
     def _apply_perturbation(self, solution: Solution, pert_type: str) -> Solution:
@@ -205,21 +179,16 @@ class DQNEnv:
 
     def _apply_local_search(self, solution: Solution, ls_type: str) -> Solution:
         """Apply local search to solution."""
-        if ls_type not in LOCAL_SEARCH_DISPATCH:
-            raise ValueError(f"Unknown local search: {ls_type}")
-
-        ls_func = LOCAL_SEARCH_DISPATCH[ls_type]
-
-        # 2-opt variants can use pre-computed neighbor lists
-        if ls_type in ("two_opt_nn", "two_opt_dlb"):
-            return ls_func(solution, neighbors=self._neighbors)
-        else:
-            return ls_func(solution)
+        if ls_type == "two_opt":
+            return two_opt(solution, neighbors=self._neighbors)
+        elif ls_type == "lin_kernighan":
+            return lin_kernighan(solution)
+        raise ValueError(f"Unknown local search: {ls_type}")
 
     @property
     def state_dim(self) -> int:
         """State vector dimension."""
-        return DQNState.dim(self.history_len, N_ACTIONS)
+        return DQNState.dim(self.history_len)
 
     @property
     def n_actions(self) -> int:
