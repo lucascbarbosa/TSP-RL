@@ -290,7 +290,7 @@ def plot_learning_curves_comparison(
 def plot_q_values_comparison(
     stats_list: List[dict],
     labels: List[str],
-    window: int = 500,
+    window: int | None = None,
     title: Optional[str] = None,
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
@@ -302,7 +302,7 @@ def plot_q_values_comparison(
     Args:
         stats_list: List of dicts with 'q_values_mean' and 'q_values_max' keys.
         labels: Label for each variant.
-        window: Moving average window size.
+        window: Moving average window size (default: 10% of data length, min 10).
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
@@ -315,30 +315,35 @@ def plot_q_values_comparison(
         # Mean Q-values
         q_mean = np.array(stats.get("q_values_mean", []))
         if len(q_mean) > 0:
+            # Adaptive window: 10% of data length, min 10, max 500
+            w = window if window is not None else max(10, min(500, len(q_mean) // 10))
             updates = np.arange(1, len(q_mean) + 1)
             axes[0].plot(updates, q_mean, color=color, alpha=0.35, linewidth=0.5)
-            if len(q_mean) >= window:
-                ma = np.convolve(q_mean, np.ones(window) / window, mode="valid")
-                axes[0].plot(np.arange(window, len(q_mean) + 1), ma, color=color, linewidth=2, label=label)
+            if len(q_mean) >= w:
+                ma = np.convolve(q_mean, np.ones(w) / w, mode="valid")
+                axes[0].plot(np.arange(w, len(q_mean) + 1), ma, color=color, linewidth=2, label=label)
 
         # Max Q-values
         q_max = np.array(stats.get("q_values_max", []))
         if len(q_max) > 0:
+            w = window if window is not None else max(10, min(500, len(q_max) // 10))
             updates = np.arange(1, len(q_max) + 1)
             axes[1].plot(updates, q_max, color=color, alpha=0.35, linewidth=0.5)
-            if len(q_max) >= window:
-                ma = np.convolve(q_max, np.ones(window) / window, mode="valid")
-                axes[1].plot(np.arange(window, len(q_max) + 1), ma, color=color, linewidth=2, label=label)
+            if len(q_max) >= w:
+                ma = np.convolve(q_max, np.ones(w) / w, mode="valid")
+                axes[1].plot(np.arange(w, len(q_max) + 1), ma, color=color, linewidth=2, label=label)
 
     axes[0].set_xlabel("Update Step")
     axes[0].set_ylabel("Mean Q-value")
     axes[0].set_title("Mean Q-values")
-    axes[0].legend(loc="upper left", framealpha=0.9)
+    if axes[0].get_legend_handles_labels()[0]:
+        axes[0].legend(loc="upper left", framealpha=0.9)
 
     axes[1].set_xlabel("Update Step")
     axes[1].set_ylabel("Max Q-value")
     axes[1].set_title("Max Q-values (overestimation indicator)")
-    axes[1].legend(loc="upper left", framealpha=0.9)
+    if axes[1].get_legend_handles_labels()[0]:
+        axes[1].legend(loc="upper left", framealpha=0.9)
 
     if title:
         fig.suptitle(title, fontsize=12)

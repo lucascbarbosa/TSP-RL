@@ -303,6 +303,9 @@ def train_dqn(
     then trains using baseline-relative gaps for consistent state distribution
     between training and evaluation.
 
+    If instances already have baseline_cost set, skips baseline computation
+    (useful when training multiple variants on same instances).
+
     Args:
         instances: List of training instances.
         config: Training configuration.
@@ -317,21 +320,31 @@ def train_dqn(
         raise ValueError("No instances provided")
 
     # Compute baselines for all instances (once, reused across episodes)
+    # Skip if baselines already computed (e.g., when training multiple variants)
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
 
-    if dataset_path is not None and instance_ids is not None:
-        # Parallel baseline computation
+    # Check if baselines already set on instances (access private attr to avoid exception)
+    baselines_needed = [inst for inst in instances if inst._baseline_cost is None]
+
+    if not baselines_needed:
+        if verbose:
+            print(f"  Baselines already computed for {len(instances)} instances")
+    elif dataset_path is not None and instance_ids is not None:
+        # Parallel baseline computation (only for instances that need it)
         n_workers = max(1, config.n_workers)
-        baselines = compute_baselines_parallel(dataset_path, instance_ids, time_budget, n_workers, verbose)
-        # Set baselines on instances
-        for inst, inst_id in zip(instances, instance_ids):
-            inst.set_baseline_cost(baselines[inst_id])
+        needed_ids = [inst_id for inst, inst_id in zip(instances, instance_ids) if inst._baseline_cost is None]
+        if needed_ids:
+            baselines = compute_baselines_parallel(dataset_path, needed_ids, time_budget, n_workers, verbose)
+            # Set baselines on instances
+            for inst, inst_id in zip(instances, instance_ids):
+                if inst._baseline_cost is None:
+                    inst.set_baseline_cost(baselines[inst_id])
     else:
         # Sequential baseline computation
         if verbose:
-            print(f"  Computing baselines for {len(instances)} instances...")
-        for inst in instances:
+            print(f"  Computing baselines for {len(baselines_needed)} instances...")
+        for inst in baselines_needed:
             baseline_cost = _compute_baseline(inst, time_budget)
             inst.set_baseline_cost(baseline_cost)
         if verbose:
@@ -669,6 +682,9 @@ def evaluate_dqn(
     Computes baseline for each instance first, then runs DQN using baseline
     as state reference (consistent with training distribution).
 
+    If instances already have baseline_cost set, skips baseline computation
+    (useful when evaluating multiple models on same instances).
+
     Args:
         model: Trained Q-network.
         instances: List of test instances.
@@ -685,25 +701,40 @@ def evaluate_dqn(
     if not instances:
         return [], []
 
-    # Compute baselines for all test instances
+    # Compute baselines for test instances (skip if already set)
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
 
-    if dataset_path is not None and instance_ids is not None:
-        # Parallel baseline computation
+    # Check which instances need baseline computation (access private attr to avoid exception)
+    baselines_needed = [inst for inst in instances if inst._baseline_cost is None]
+
+    if not baselines_needed:
+        # All baselines already computed - build dict from instances
+        baselines = {}
+        if instance_ids:
+            for inst, inst_id in zip(instances, instance_ids):
+                baselines[inst_id] = inst.baseline_cost
+    elif dataset_path is not None and instance_ids is not None:
+        # Parallel baseline computation (only for instances that need it)
         n_workers = max(1, config.n_workers)
-        baselines = compute_baselines_parallel(dataset_path, instance_ids, time_budget, n_workers, verbose=False)
-        # Set baselines on instances
-        for inst, inst_id in zip(instances, instance_ids):
-            inst.set_baseline_cost(baselines[inst_id])
+        needed_ids = [inst_id for inst, inst_id in zip(instances, instance_ids) if inst._baseline_cost is None]
+        if needed_ids:
+            computed = compute_baselines_parallel(dataset_path, needed_ids, time_budget, n_workers, verbose=False)
+            # Set baselines on instances that needed them
+            for inst, inst_id in zip(instances, instance_ids):
+                if inst._baseline_cost is None:
+                    inst.set_baseline_cost(computed[inst_id])
+        # Build complete baselines dict
+        baselines = {inst_id: inst.baseline_cost for inst, inst_id in zip(instances, instance_ids)}
     else:
         # Sequential baseline computation
         baselines = {}
-        for i, inst in enumerate(instances):
+        for i, inst in enumerate(baselines_needed):
             baseline_cost = _compute_baseline(inst, time_budget)
             inst.set_baseline_cost(baseline_cost)
-            if instance_ids:
-                baselines[instance_ids[i]] = baseline_cost
+        # Build dict if we have instance_ids
+        if instance_ids:
+            baselines = {inst_id: inst.baseline_cost for inst, inst_id in zip(instances, instance_ids)}
 
     # Use parallel evaluation if workers > 1 and we have dataset info
     if config.n_workers > 1 and dataset_path is not None and instance_ids is not None:
