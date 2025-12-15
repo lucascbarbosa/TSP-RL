@@ -21,7 +21,7 @@ import json
 
 import numpy as np
 
-from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model
+from src.rl.dqn import DQNConfig, train_dqn, evaluate_dqn, save_model, N_ACTIONS
 from src.tsp.instance import TSPDataset
 
 
@@ -85,6 +85,12 @@ def main() -> None:
         type=int,
         default=64,
         help="Hidden layer dimension (default: 64)",
+    )
+    parser.add_argument(
+        "--history_len",
+        type=int,
+        default=2,
+        help="Number of past actions in state (default: 2)",
     )
     parser.add_argument(
         "--device",
@@ -153,6 +159,7 @@ def main() -> None:
         # Configure training
         config = DQNConfig(
             time_budget=args.time_budget,
+            history_len=args.history_len,
             n_episodes=args.episodes,
             gamma=args.gamma,
             lr=args.lr,
@@ -181,6 +188,7 @@ def main() -> None:
         stats_dict = {
             "type": args.type,
             "size": size,
+            "n_actions": N_ACTIONS,
             "n_episodes": args.episodes,
             "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
             "test_avg_gap": float(avg_gap) if test_instances else None,

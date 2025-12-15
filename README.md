@@ -21,7 +21,7 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 
 ## Modelagem MDP
 
-### Estado (contínuo, 30 dimensões)
+### Estado (contínuo, 45 dimensões)
 
 O estado é um vetor contínuo que captura:
 
@@ -30,7 +30,7 @@ O estado é um vetor contínuo que captura:
 | `g` | 1 | Gap atual normalizado (log scale) |
 | `g_best` | 1 | Melhor gap do episódio (normalizado) |
 | `t_ratio` | 1 | Tempo restante / T ∈ [0, 1] |
-| `history` | 27 | Últimas 3 ações (one-hot encoded, 9 cada) |
+| `history` | 42 | Últimas 2 ações (one-hot encoded, 21 cada) |
 
 **Normalização do gap:** `g_norm = log(1 + gap) / log(101)` — comprime gaps grandes, preserva resolução em gaps pequenos.
 
@@ -46,24 +46,25 @@ reward = g_best_old - g_best_new
 - Alinha o sinal de recompensa com o objetivo real (minimizar gap)
 - Sparse mas informativo
 
-### Ações (9)
+### Ações (21)
 
-Cada ação é um par **(perturbação, busca local)**:
+Cada ação é um par **(perturbação, busca local)**, com variantes de 2-opt expostas individualmente:
 
-| Ação | Perturbação | Busca Local | Uso |
-|------|-------------|-------------|-----|
-| 0 | two_swap | 2-opt | Refinamento leve |
-| 1 | two_swap | Lin-Kernighan | Refinamento intenso |
-| 2 | segment_reverse | 2-opt | Perturbação média |
-| 3 | segment_reverse | Lin-Kernighan | Perturbação + intensificação |
-| 4 | random | 2-opt | Restart rápido |
-| 5 | nearest | 2-opt | Restart de qualidade |
-| 6 | cheapest | 2-opt | Restart alta qualidade |
-| 7 | nearest | Lin-Kernighan | Restart + intensificação |
-| 8 | grasp | 2-opt | Restart diversificado |
+**Perturbações leves** (0-7):
+| Ação | Perturbação | Busca Local |
+|------|-------------|-------------|
+| 0-3 | two_swap | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
+| 4-7 | segment_reverse | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
 
-**Perturbações leves** (`two_swap`, `segment_reverse`): modificam a solução atual.
-**Perturbações destrutivas** (`random`, `nearest`, `cheapest`, `grasp`): reconstroem do zero.
+**Perturbações destrutivas** (8-20):
+| Ação | Perturbação | Busca Local |
+|------|-------------|-------------|
+| 8-10 | random | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+| 11-14 | nearest | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
+| 15-17 | cheapest | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+| 18-20 | grasp | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+
+O agente aprende qual variante de 2-opt usar em cada situação. Operadores lentos são naturalmente penalizados pelo desconto temporal.
 
 ## Estrutura do Projeto
 
@@ -73,25 +74,19 @@ TSP-RL/
 │   ├── tsp/                      # Core TSP
 │   │   ├── solution.py           # Representação de soluções
 │   │   ├── instance.py           # TSPInstance, TSPDataset
-│   │   ├── local_search.py       # two_opt (adaptativo), lin_kernighan
+│   │   ├── local_search.py       # two_opt_full, two_opt_nn, two_opt_dlb, lin_kernighan
 │   │   ├── perturbation.py       # two_swap, segment_reverse
 │   │   └── constructive.py       # random, nearest, cheapest, grasp
-│   ├── ils/
-│   │   └── q_ils.py              # QILS, State, Action, RunStats
 │   └── rl/
-│       ├── dqn/                  # Deep Q-Network
-│       │   ├── state.py          # DQNState, normalize_gap
-│       │   ├── network.py        # QNetwork (MLP)
-│       │   ├── buffer.py         # ReplayBuffer
-│       │   ├── env.py            # DQNEnv (ambiente gym-like)
-│       │   └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
-│       ├── q_table.py            # QTable (baseline)
-│       ├── q_learning.py         # Value iteration (baseline)
-│       └── mdp.py                # MDP (baseline)
+│       └── dqn/                  # Deep Q-Network
+│           ├── state.py          # DQNState, normalize_gap
+│           ├── network.py        # QNetwork (MLP)
+│           ├── buffer.py         # ReplayBuffer
+│           ├── env.py            # DQNEnv, ACTION_DECODE, N_ACTIONS
+│           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
 │   ├── train_dqn.py              # Treinamento DQN
 │   ├── generate_splits.py        # Gera splits train/test
-│   ├── evaluate.py               # Avaliação
 │   └── clear.sh                  # Remove arquivos gerados
 ├── models/
 │   └── dqn/                      # Modelos treinados (.pt)
@@ -144,16 +139,17 @@ config = DQNConfig(
 )
 
 model, stats = train_dqn(instances, config)
-print(f"Gap médio final: {stats.episode_best_gaps[-100:]:.2f}%")
+print(f"Gap médio final: {np.mean(stats.episode_best_gaps[-100:]):.2f}%")
 ```
 
 ### Avaliação
 
 ```python
-from src.rl.dqn import load_model, evaluate_dqn, DQNConfig
+from src import TSPDataset, load_model, evaluate_dqn, DQNConfig, N_ACTIONS
 
 # Carregar modelo treinado
-model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=30)
+state_dim = 3 + 2 * N_ACTIONS  # 45 com history_len=2
+model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=state_dim)
 
 # Avaliar em instâncias de teste
 test_instances = list(TSPDataset("data/EUC_2D.json", instance_ids=range(1000, 1111)))
@@ -166,13 +162,14 @@ print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")
 ### Ambiente (para experimentos)
 
 ```python
-from src import TSPInstance, DQNEnv
+from src import TSPInstance, DQNEnv, N_ACTIONS
 
 instance = TSPInstance("data/EUC_2D.json", instance_id=0)
-env = DQNEnv(instance, time_budget=5.0, history_len=3)
+env = DQNEnv(instance, time_budget=5.0, history_len=2)
 
 state = env.reset()
-print(f"State dim: {env.state_dim}")  # 30
+print(f"State dim: {env.state_dim}")  # 45
+print(f"N_ACTIONS: {N_ACTIONS}")      # 21
 
 while True:
     action = 0  # ou política aprendida
@@ -202,7 +199,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 class DQNConfig:
     # Ambiente
     time_budget: float = 10.0   # T(n) = (n/100)² × time_budget
-    history_len: int = 3        # Ações no histórico
+    history_len: int = 2        # Ações no histórico
 
     # DQN
     gamma: float = 0.99
@@ -224,38 +221,30 @@ class DQNConfig:
 ## Arquitetura da Rede
 
 ```
-QNetwork: state (30) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(9)
+QNetwork: state (45) → Linear(64) → ReLU → Linear(64) → ReLU → Linear(21)
 ```
 
-- Input: estado contínuo (30 dims com history_len=3)
-- Output: Q-values para cada uma das 9 ações
-- ~5K parâmetros
+- Input: estado contínuo (45 dims com history_len=2 e 21 ações)
+- Output: Q-values para cada uma das 21 ações
+- ~6K parâmetros
 
 ## Operadores TSP
 
-### Buscas Locais
+### Buscas Locais (4 variantes)
 
-- **2-opt**: Seleção adaptativa baseada em n
-- **Lin-Kernighan**: Cadeias de 2-opt com depth=2
+| Variante | Complexidade | Descrição |
+|----------|--------------|-----------|
+| `two_opt_full` | O(n²) | Melhor qualidade, mais lento |
+| `two_opt_nn` | O(n·k) | Neighbor lists, bom equilíbrio |
+| `two_opt_dlb` | O(n·k) | Don't look bits, mais rápido |
+| `lin_kernighan` | Variável | Cadeias de 2-opt com depth=2 |
 
-#### 2-opt Adaptativo
-
-O `two_opt` seleciona automaticamente a variante ideal baseado no tamanho da instância:
-
-| Tamanho (n) | Variante | Complexidade | Motivo |
-|-------------|----------|--------------|--------|
-| n < 40 | `two_opt_full` | O(n²) | Overhead de neighbor lists não compensa |
-| 40 ≤ n < 80 | `two_opt_nn` | O(n·k) | Bom equilíbrio qualidade/velocidade |
-| n ≥ 80 | `two_opt_dlb` | O(n·k) + DLB | Máxima velocidade, ~1-4% de perda de qualidade |
-
-Parâmetro `k` (número de vizinhos):
+O parâmetro `k` (número de vizinhos) para `two_opt_nn` e `two_opt_dlb`:
 - **int**: usado diretamente (ex: `k=20`)
 - **float em (0,1)**: proporção de n (ex: `k=0.5` = 50% das cidades)
 - **Default**: `k=0.5`
 
-As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão disponíveis via import direto de `src.tsp.local_search`.
-
-### Perturbações
+### Perturbações Leves
 
 - **two_swap**: Troca 2 vértices aleatórios
 - **segment_reverse**: Reverte segmento aleatório do tour
@@ -265,7 +254,7 @@ As variantes individuais (`two_opt_full`, `two_opt_nn`, `two_opt_dlb`) estão di
 - **random**: Tour aleatório
 - **nearest**: Vizinho mais próximo
 - **cheapest**: Inserção mais barata
-- **grasp**: GRASP com RCL (α=0.2, seleciona de lista restrita de candidatos "bons o suficiente")
+- **grasp**: GRASP com RCL (α=0.2)
 
 ## Dados
 

@@ -65,41 +65,44 @@ class DQNState:
         g: Current gap (normalized).
         g_best: Best gap found in episode (normalized).
         t_ratio: Remaining time ratio (t_remaining / T) in [0, 1].
-        history: Tuple of last R action indices (0-8), or -1 for empty slots.
+        history: Tuple of last R action indices, or -1 for empty slots.
+        n_actions: Number of available actions (for one-hot encoding).
     """
 
     g: float
     g_best: float
     t_ratio: float
-    history: tuple[int, ...] = field(default_factory=lambda: (-1, -1, -1))
+    history: tuple[int, ...] = field(default_factory=lambda: (-1, -1))
+    n_actions: int = 21  # Default to current action space size
 
     def to_numpy(self) -> np.ndarray:
         """
         Convert state to numpy array for network input.
 
         Returns:
-            1D array of shape (3 + R*9,) with:
+            1D array of shape (3 + R*n_actions,) with:
             - [0:3]: g, g_best, t_ratio
-            - [3:]: one-hot encoded history (R actions × 9 options)
+            - [3:]: one-hot encoded history (R actions × n_actions options)
         """
         base = [self.g, self.g_best, self.t_ratio]
         history_onehot = []
         for action_idx in self.history:
-            oh = [0.0] * 9
-            if 0 <= action_idx < 9:
+            oh = [0.0] * self.n_actions
+            if 0 <= action_idx < self.n_actions:
                 oh[action_idx] = 1.0
             history_onehot.extend(oh)
         return np.array(base + history_onehot, dtype=np.float32)
 
     @staticmethod
-    def dim(history_len: int = 3) -> int:
+    def dim(history_len: int = 2, n_actions: int = 21) -> int:
         """
         Get state vector dimension.
 
         Args:
             history_len: Number of past actions to track.
+            n_actions: Number of available actions.
 
         Returns:
-            Total dimension: 3 + history_len * 9.
+            Total dimension: 3 + history_len * n_actions.
         """
-        return 3 + history_len * 9
+        return 3 + history_len * n_actions
