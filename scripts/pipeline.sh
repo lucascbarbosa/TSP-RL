@@ -11,10 +11,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# Defaults
+# Defaults (must match pipeline.py argparse defaults)
 TYPES="EUC_2D"
 SIZES="10 20"
-EPISODES=64
+EPISODES=200
 TIME_BUDGET=5.0
 GAMMA=0.99
 LR=0.001

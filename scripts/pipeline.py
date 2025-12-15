@@ -29,8 +29,8 @@ class PipelineConfig:
 
     types: list[str] = field(default_factory=lambda: ["EUC_2D"])
     sizes: list[int] = field(default_factory=lambda: [10, 20])
-    episodes: int = 400
-    time_budget: float = 10.0
+    episodes: int = 200
+    time_budget: float = 5.0
     gamma: float = 0.99
     lr: float = 0.001
     hidden_dim: int = 64
@@ -77,7 +77,7 @@ def main():
     parser.add_argument("--types", nargs="+", default=["EUC_2D"], choices=["EUC_2D", "ATT", "GEO"])
     parser.add_argument("--sizes", nargs="+", type=int, default=[10, 20])
     parser.add_argument("--episodes", type=int, default=200)
-    parser.add_argument("--time_budget", type=float, default=10.0)
+    parser.add_argument("--time_budget", type=float, default=5.0)
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--hidden_dim", type=int, default=64)
@@ -123,7 +123,23 @@ def main():
     print("DQN-ILS Pipeline")
     print("=" * 50)
     print(f"Started: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Config: types={config.types}, sizes={config.sizes}, episodes={config.episodes}, workers={config.workers}")
+    print()
+    print("Configuration:")
+    print(f"  Instance types:    {config.types}")
+    print(f"  Instance sizes:    {config.sizes}")
+    print(f"  Episodes:          {config.episodes}")
+    print(f"  Time budget:       {config.time_budget}s")
+    print(f"  Gamma:             {config.gamma}")
+    print(f"  Learning rate:     {config.lr}")
+    print(f"  Hidden dim:        {config.hidden_dim}")
+    print(f"  History len:       {config.history_len}")
+    print(f"  Train limit:       {config.train_limit}")
+    print(f"  Val limit:         {config.val_limit}")
+    print(f"  Test limit:        {config.test_limit}")
+    print(f"  Baseline:          {config.baseline}")
+    print(f"  Compare double:    {config.compare_double}")
+    print(f"  Device:            {config.device}")
+    print(f"  Workers:           {config.workers}")
 
     timings = {}
 
