@@ -199,10 +199,11 @@ def run_comparison(
                     instance_ids=size_train_ids,
                 )
 
-                # Evaluate
+                # Evaluate (returns unsupervised and supervised gaps)
                 test_gaps = []
+                test_gaps_unsup = []
                 if test_instances:
-                    test_gaps = evaluate_dqn(
+                    test_gaps_unsup, test_gaps = evaluate_dqn(
                         model,
                         test_instances,
                         config,
@@ -213,8 +214,10 @@ def run_comparison(
 
                 stats_dict = stats_to_dict(stats)
                 stats_dict["test_gaps"] = test_gaps
+                stats_dict["test_gaps_unsup"] = test_gaps_unsup
                 stats_dict["test_avg_gap"] = float(np.mean(test_gaps)) if test_gaps else None
                 stats_dict["test_std_gap"] = float(np.std(test_gaps)) if test_gaps else None
+                stats_dict["test_avg_gap_unsup"] = float(np.mean(test_gaps_unsup)) if test_gaps_unsup else None
                 # Add hyperparams for plot titles
                 stats_dict["n_episodes"] = episodes
                 stats_dict["lr"] = lr
@@ -242,7 +245,10 @@ def run_comparison(
                 }
 
                 if verbose and stats_dict["test_avg_gap"] is not None:
-                    print(f"  Test gap: {stats_dict['test_avg_gap']:.2f}% ± {stats_dict['test_std_gap']:.2f}%")
+                    unsup = stats_dict["test_avg_gap_unsup"]
+                    print(
+                        f"  Test: sup={stats_dict['test_avg_gap']:.2f}% ± {stats_dict['test_std_gap']:.2f}%, unsup={unsup:.2f}%"
+                    )
 
         # Generate comparison plots with hyperparameters in title
         if verbose:

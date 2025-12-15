@@ -465,11 +465,7 @@ def _train_dqn_sequential(
         if verbose and (episode + 1) % 100 == 0:
             recent_gaps = stats.episode_best_gaps[-100:]
             avg_gap = np.mean(recent_gaps)
-            print(
-                f"Episode {episode + 1}/{config.n_episodes} | "
-                f"Avg gap (last 100): {avg_gap:.2f}% | "
-                f"ε: {epsilon:.3f}"
-            )
+            print(f"Episode {episode + 1}/{config.n_episodes} | " f"Unsup gap: {avg_gap:.2f}% | " f"ε: {epsilon:.3f}")
 
     return q_net, stats
 
@@ -608,15 +604,20 @@ def _train_dqn_parallel(
                 current_epsilon = stats.epsilons[-1] if stats.epsilons else config.epsilon_start
                 print(
                     f"Episode {episode_counter}/{config.n_episodes} | "
-                    f"Avg gap (last 100): {avg_gap:.2f}% | "
+                    f"Unsup gap: {avg_gap:.2f}% | "
                     f"ε: {current_epsilon:.3f}"
                 )
 
     return q_net, stats
 
 
-def _eval_worker(args: tuple) -> float:
-    """Evaluate a single instance (worker function for parallel evaluation)."""
+def _eval_worker(args: tuple) -> tuple[float, float]:
+    """
+    Evaluate a single instance (worker function for parallel evaluation).
+
+    Returns:
+        Tuple of (gap_vs_baseline, gap_vs_optimal).
+    """
     instance_id, dataset_path, weights, config_dict, baselines = args
 
     # Load instance
@@ -646,7 +647,12 @@ def _eval_worker(args: tuple) -> float:
             action = int(q_values.argmax().item())
         state, _, done = env.step(action)
 
-    return env.best_gap
+    # Compute both gaps
+    gap_vs_base = env.best_gap
+    best_cost = env.solution.cost
+    gap_vs_opt = ((best_cost - instance.opt_cost) / instance.opt_cost) * 100
+
+    return gap_vs_base, gap_vs_opt
 
 
 def evaluate_dqn(
@@ -656,7 +662,7 @@ def evaluate_dqn(
     verbose: bool = False,
     dataset_path: str | None = None,
     instance_ids: list[int] | None = None,
-) -> list[float]:
+) -> tuple[list[float], list[float]]:
     """
     Evaluate trained DQN on test instances.
 
@@ -672,10 +678,12 @@ def evaluate_dqn(
         instance_ids: List of instance IDs (required for parallel evaluation).
 
     Returns:
-        List of final gaps (%) for each instance.
+        Tuple of (gaps_vs_baseline, gaps_vs_optimal) where each is a list of floats.
+        - gaps_vs_baseline can be negative (agent beats baseline)
+        - gaps_vs_optimal is always >= 0
     """
     if not instances:
-        return []
+        return [], []
 
     # Compute baselines for all test instances
     n = instances[0].dimension
@@ -708,24 +716,28 @@ def evaluate_dqn(
 
         worker_args = [(inst_id, dataset_path, weights, config_dict, baselines) for inst_id in instance_ids]
 
-        gaps = []
+        gaps_base = []
+        gaps_opt = []
         with ProcessPoolExecutor(max_workers=config.n_workers) as executor:
             futures = {executor.submit(_eval_worker, args): i for i, args in enumerate(worker_args)}
             results = [None] * len(worker_args)
             for future in as_completed(futures):
                 idx = futures[future]
                 results[idx] = future.result()
-            gaps = results
+            for gap_base, gap_opt in results:
+                gaps_base.append(gap_base)
+                gaps_opt.append(gap_opt)
 
         if verbose:
-            for i, gap in enumerate(gaps):
-                print(f"Instance {i + 1}/{len(gaps)}: gap = {gap:.2f}%")
+            for i, (gb, go) in enumerate(zip(gaps_base, gaps_opt)):
+                print(f"Instance {i + 1}/{len(gaps_base)}: sup={go:.2f}%, unsup={gb:.2f}%")
 
-        return gaps
+        return gaps_base, gaps_opt
 
     # Sequential evaluation (fallback)
     model.eval()
-    gaps = []
+    gaps_base = []
+    gaps_opt = []
 
     for i, instance in enumerate(instances):
         env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
@@ -740,12 +752,17 @@ def evaluate_dqn(
 
             state, _, done = env.step(action)
 
-        gaps.append(env.best_gap)
+        gap_base = env.best_gap
+        best_cost = env.solution.cost
+        gap_opt = ((best_cost - instance.opt_cost) / instance.opt_cost) * 100
+
+        gaps_base.append(gap_base)
+        gaps_opt.append(gap_opt)
 
         if verbose:
-            print(f"Instance {i + 1}/{len(instances)}: gap = {env.best_gap:.2f}%")
+            print(f"Instance {i + 1}/{len(instances)}: sup={gap_opt:.2f}%, unsup={gap_base:.2f}%")
 
-    return gaps
+    return gaps_base, gaps_opt
 
 
 def save_model(model: QNetwork, path: str | Path) -> None:

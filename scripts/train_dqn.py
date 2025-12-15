@@ -141,11 +141,14 @@ def run_training(
             )
 
             # Evaluate on test set (parallel if workers > 1)
+            # Returns (gaps_vs_base, gaps_vs_opt): unsupervised and supervised gaps
             test_avg_gap = None
             test_std_gap = None
+            test_avg_gap_unsup = None
             test_gaps = []
+            test_gaps_unsup = []
             if test_instances:
-                test_gaps = evaluate_dqn(
+                test_gaps_unsup, test_gaps = evaluate_dqn(
                     model,
                     test_instances,
                     config,
@@ -155,8 +158,9 @@ def run_training(
                 )
                 test_avg_gap = float(np.mean(test_gaps))
                 test_std_gap = float(np.std(test_gaps))
+                test_avg_gap_unsup = float(np.mean(test_gaps_unsup))
                 if verbose:
-                    print(f"  Test gap: {test_avg_gap:.2f}% ± {test_std_gap:.2f}%")
+                    print(f"  Test: sup={test_avg_gap:.2f}% ± {test_std_gap:.2f}%, unsup={test_avg_gap_unsup:.2f}%")
 
             # Determine filename suffix
             if compare_variants:
@@ -183,9 +187,11 @@ def run_training(
                 "hidden_dim": hidden_dim,
                 "time_budget": time_budget,
                 "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
-                "test_avg_gap": test_avg_gap,
+                "test_avg_gap": test_avg_gap,  # supervised (vs optimal)
                 "test_std_gap": test_std_gap,
+                "test_avg_gap_unsup": test_avg_gap_unsup,  # unsupervised (vs baseline)
                 "test_gaps": test_gaps,
+                "test_gaps_unsup": test_gaps_unsup,
                 "episode_best_gaps": stats.episode_best_gaps,
                 "episode_rewards": stats.episode_rewards,
                 "episode_lengths": stats.episode_lengths,
