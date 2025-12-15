@@ -18,11 +18,11 @@ data/train
 data/run-*/
 **/old/
 
-# Generated outputs
-data/splits.json
-data/results/
-data/plots/
-models/
+# # Generated outputs
+# data/splits.json
+# data/results/
+# data/plots/
+# models/
 
 # LaTeX
 *.aux
