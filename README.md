@@ -115,6 +115,7 @@ TSP-RL/
 │   ├── pipeline.sh               # Pipeline Bash (alternativo)
 │   ├── train_dqn.py              # Treinamento DQN (paralelo)
 │   ├── evaluate_dqn.py           # Avaliação de modelos (paralela)
+│   ├── compare_dqn_double.py     # Comparação DQN vs Double DQN
 │   ├── generate_splits.py        # Gera splits train/test
 │   ├── generate_plots.py         # Gera gráficos de resultados
 │   └── clear.sh                  # Remove arquivos gerados
@@ -147,11 +148,11 @@ python scripts/pipeline.py --help
 # Gerar splits (se necessário)
 python scripts/generate_splits.py --seed 42
 
-# Treinar para EUC_2D, tamanho 50, 2000 episódios (16 workers paralelos)
-python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000 --workers 16
+# Treinar para EUC_2D, tamanho 50, 128 episódios (16 workers paralelos)
+python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 128 --workers 16
 
 # Treinar múltiplos tamanhos
-python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
+python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 --episodes 128
 ```
 
 ### Avaliar modelo treinado
@@ -188,7 +189,7 @@ instances = list(dataset)
 # Configurar e treinar
 config = DQNConfig(
     time_budget=10.0,      # segundos (escala com n²)
-    n_episodes=2000,
+    n_episodes=128,
     gamma=0.99,
     lr=0.001,
     hidden_dim=64,
@@ -245,7 +246,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 | Parâmetro | Flag | Default | Descrição |
 |-----------|------|---------|-----------|
 | Time budget | `--time_budget` | 10.0 | Budget base em segundos (escala com n²) |
-| Episódios | `--episodes` | 2000 | Número de episódios de treino |
+| Episódios | `--episodes` | 128 | Número de episódios de treino |
 | γ (gamma) | `--gamma` | 0.99 | Discount factor |
 | Learning rate | `--lr` | 0.001 | Taxa de aprendizado |
 | Hidden dim | `--hidden_dim` | 64 | Neurônios por camada oculta |
@@ -273,10 +274,33 @@ class DQNConfig:
     epsilon_decay: float = 0.995
 
     # Treinamento
-    n_episodes: int = 2000
+    n_episodes: int = 128
     updates_per_episode: int = 5
     n_workers: int = 1          # Workers paralelos (batch episodes)
+
+    # Double DQN
+    use_double_dqn: bool = True # Reduz superestimação de Q-values
 ```
+
+### Double DQN
+
+Por padrão, `use_double_dqn=True`. Double DQN separa seleção (rede online) de avaliação (target network), reduzindo o viés de superestimação:
+
+```
+# Standard DQN:  target = r + γ * max_a Q_target(s', a)
+# Double DQN:    target = r + γ * Q_target(s', argmax_a Q_online(s', a))
+```
+
+Para comparar as variantes:
+
+```bash
+python scripts/compare_dqn_double.py --type EUC_2D --sizes 30 50 --episodes 128
+```
+
+Gera automaticamente em `data/results/comparison/plots/`:
+- Curvas de aprendizado comparativas
+- Evolução dos Q-values (indicador de superestimação)
+- Distribuição de ações de cada variante
 
 ## Arquitetura da Rede
 

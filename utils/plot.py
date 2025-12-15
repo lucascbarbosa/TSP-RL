@@ -235,6 +235,208 @@ def plot_action_distribution(
         plt.close()
 
 
+def plot_learning_curves_comparison(
+    stats_list: List[dict],
+    labels: List[str],
+    window: int = 100,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot learning curves comparing multiple DQN variants.
+
+    Args:
+        stats_list: List of dicts with 'episode_best_gaps' key.
+        labels: Label for each variant (e.g., ["DQN", "Double DQN"]).
+        window: Moving average window size.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for i, (stats, label) in enumerate(zip(stats_list, labels)):
+        gaps = np.array(stats["episode_best_gaps"])
+        episodes = np.arange(1, len(gaps) + 1)
+        color = colors[i % len(colors)]
+
+        ax.plot(episodes, gaps, color=color, alpha=0.15, linewidth=0.5)
+
+        if len(gaps) >= window:
+            ma = np.convolve(gaps, np.ones(window) / window, mode="valid")
+            ma_episodes = episodes[window - 1 :]
+            ax.plot(ma_episodes, ma, color=color, linewidth=2, label=f"{label} (MA-{window})")
+
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Best Gap (%)")
+    ax.set_xlim(0, max(len(s["episode_best_gaps"]) for s in stats_list))
+    ax.set_ylim(bottom=0)
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    ax.legend(loc="upper right", framealpha=0.9)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_q_values_comparison(
+    stats_list: List[dict],
+    labels: List[str],
+    window: int = 500,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot Q-value evolution comparing multiple DQN variants.
+
+    Shows mean and max Q-values over training to analyze overestimation.
+
+    Args:
+        stats_list: List of dicts with 'q_values_mean' and 'q_values_max' keys.
+        labels: Label for each variant.
+        window: Moving average window size.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    for i, (stats, label) in enumerate(zip(stats_list, labels)):
+        color = colors[i % len(colors)]
+
+        # Mean Q-values
+        q_mean = np.array(stats.get("q_values_mean", []))
+        if len(q_mean) > 0:
+            updates = np.arange(1, len(q_mean) + 1)
+            axes[0].plot(updates, q_mean, color=color, alpha=0.1, linewidth=0.3)
+            if len(q_mean) >= window:
+                ma = np.convolve(q_mean, np.ones(window) / window, mode="valid")
+                axes[0].plot(np.arange(window, len(q_mean) + 1), ma, color=color, linewidth=1.5, label=label)
+
+        # Max Q-values
+        q_max = np.array(stats.get("q_values_max", []))
+        if len(q_max) > 0:
+            updates = np.arange(1, len(q_max) + 1)
+            axes[1].plot(updates, q_max, color=color, alpha=0.1, linewidth=0.3)
+            if len(q_max) >= window:
+                ma = np.convolve(q_max, np.ones(window) / window, mode="valid")
+                axes[1].plot(np.arange(window, len(q_max) + 1), ma, color=color, linewidth=1.5, label=label)
+
+    axes[0].set_xlabel("Update Step")
+    axes[0].set_ylabel("Mean Q-value")
+    axes[0].set_title("Mean Q-values")
+    axes[0].legend(loc="upper left", framealpha=0.9)
+
+    axes[1].set_xlabel("Update Step")
+    axes[1].set_ylabel("Max Q-value")
+    axes[1].set_title("Max Q-values (overestimation indicator)")
+    axes[1].legend(loc="upper left", framealpha=0.9)
+
+    if title:
+        fig.suptitle(title, fontsize=12)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def plot_action_distribution_comparison(
+    stats_list: List[dict],
+    labels: List[str],
+    action_labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Plot action distributions comparing multiple DQN variants side by side.
+
+    Args:
+        stats_list: List of dicts with 'action_counts' key.
+        labels: Label for each variant.
+        action_labels: Labels for each action.
+        title: Plot title.
+        save_path: Path to save figure (displays if None).
+    """
+    colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+
+    # Get action counts
+    all_counts = []
+    for stats in stats_list:
+        counts = stats.get("action_counts", {})
+        if isinstance(counts, dict):
+            # Handle string keys (from JSON serialization)
+            int_counts = {int(k): v for k, v in counts.items()}
+            n_actions = max(int_counts.keys()) + 1 if int_counts else 0
+            counts = [int_counts.get(i, 0) for i in range(n_actions)]
+        all_counts.append(counts)
+
+    if not all_counts or not all_counts[0]:
+        return
+
+    n_actions = len(all_counts[0])
+    n_methods = len(stats_list)
+
+    if action_labels is None:
+        action_labels = [f"A{i}" for i in range(n_actions)]
+
+    # Convert to percentages
+    percentages = []
+    for counts in all_counts:
+        total = sum(counts)
+        if total > 0:
+            percentages.append([100 * c / total for c in counts])
+        else:
+            percentages.append([0] * n_actions)
+
+    fig, ax = plt.subplots(figsize=(10, max(4, n_actions * 0.3)))
+
+    bar_height = 0.8 / n_methods
+    y_positions = np.arange(n_actions)
+
+    for i, (pcts, label) in enumerate(zip(percentages, labels)):
+        offset = (i - (n_methods - 1) / 2) * bar_height
+        ax.barh(
+            y_positions + offset,
+            pcts,
+            height=bar_height * 0.9,
+            color=colors[i % len(colors)],
+            alpha=0.7,
+            label=label,
+        )
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(action_labels, fontsize=9)
+    ax.set_xlabel("Frequency (%)")
+    ax.set_ylabel("Action")
+    ax.invert_yaxis()
+    ax.legend(loc="lower right", framealpha=0.9)
+
+    if title:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
 def plot_q_values_heatmap(
     q_matrix: NDArray[np.float64],
     gap_labels: Optional[List[str]] = None,

@@ -39,6 +39,10 @@ class DQNConfig:
     buffer_size: int = 50000
     target_update_freq: int = 50  # Episodes between target updates
 
+    # Double DQN: use online network for action selection, target for evaluation
+    # Reduces overestimation bias in Q-values
+    use_double_dqn: bool = True
+
     # Exploration (logarithmic decay from start to end over all episodes)
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
@@ -69,6 +73,11 @@ class TrainingStats:
     epsilons: list[float] = field(default_factory=list)
     # Action counts from final 10% of episodes (low epsilon, learned policy)
     action_counts: dict[int, int] = field(default_factory=lambda: {i: 0 for i in range(N_ACTIONS)})
+    # Q-value statistics per update batch (for overestimation analysis)
+    q_values_mean: list[float] = field(default_factory=list)
+    q_values_max: list[float] = field(default_factory=list)
+    # Metadata
+    use_double_dqn: bool = False
 
 
 def compute_epsilon(episode: int, n_episodes: int, eps_start: float, eps_end: float) -> float:
@@ -251,7 +260,7 @@ def _train_dqn_sequential(
     optimizer = Adam(q_net.parameters(), lr=config.lr)
     replay_buffer = ReplayBuffer(config.buffer_size)
 
-    stats = TrainingStats()
+    stats = TrainingStats(use_double_dqn=config.use_double_dqn)
     final_episodes_start = int(config.n_episodes * 0.9)  # Last 10% for action stats
 
     for episode in range(config.n_episodes):
@@ -313,9 +322,16 @@ def _train_dqn_sequential(
                 q_values = q_net(batch.states)
                 q_selected = q_values.gather(1, batch.actions).squeeze(1)
 
-                # Compute target: r + γ max Q_target(s', a')
+                # Compute target
                 with torch.no_grad():
-                    next_q = target_net(batch.next_states).max(dim=1)[0]
+                    if config.use_double_dqn:
+                        # Double DQN: select action with online, evaluate with target
+                        next_q_online = q_net(batch.next_states)
+                        best_actions = next_q_online.argmax(dim=1, keepdim=True)
+                        next_q = target_net(batch.next_states).gather(1, best_actions).squeeze(1)
+                    else:
+                        # Standard DQN: max Q_target(s', a')
+                        next_q = target_net(batch.next_states).max(dim=1)[0]
                     targets = batch.rewards + config.gamma * next_q * (1 - batch.dones)
 
                 # Update
@@ -325,6 +341,9 @@ def _train_dqn_sequential(
                 optimizer.step()
 
                 stats.losses.append(loss.item())
+                # Track Q-value statistics for overestimation analysis
+                stats.q_values_mean.append(float(q_values.mean().item()))
+                stats.q_values_max.append(float(q_values.max().item()))
 
         # Update target network
         if (episode + 1) % config.target_update_freq == 0:
@@ -374,7 +393,7 @@ def _train_dqn_parallel(
     optimizer = Adam(q_net.parameters(), lr=config.lr)
     replay_buffer = ReplayBuffer(config.buffer_size)
 
-    stats = TrainingStats()
+    stats = TrainingStats(use_double_dqn=config.use_double_dqn)
     final_episodes_start = int(config.n_episodes * 0.9)  # Last 10% for action stats
 
     # Calculate number of batches
@@ -441,9 +460,16 @@ def _train_dqn_parallel(
                     q_values = q_net(batch.states)
                     q_selected = q_values.gather(1, batch.actions).squeeze(1)
 
-                    # Compute target: r + γ max Q_target(s', a')
+                    # Compute target
                     with torch.no_grad():
-                        next_q = target_net(batch.next_states).max(dim=1)[0]
+                        if config.use_double_dqn:
+                            # Double DQN: select action with online, evaluate with target
+                            next_q_online = q_net(batch.next_states)
+                            best_actions = next_q_online.argmax(dim=1, keepdim=True)
+                            next_q = target_net(batch.next_states).gather(1, best_actions).squeeze(1)
+                        else:
+                            # Standard DQN: max Q_target(s', a')
+                            next_q = target_net(batch.next_states).max(dim=1)[0]
                         targets = batch.rewards + config.gamma * next_q * (1 - batch.dones)
 
                     # Update
@@ -453,6 +479,9 @@ def _train_dqn_parallel(
                     optimizer.step()
 
                     stats.losses.append(loss.item())
+                    # Track Q-value statistics for overestimation analysis
+                    stats.q_values_mean.append(float(q_values.mean().item()))
+                    stats.q_values_max.append(float(q_values.max().item()))
 
             # Update target network
             if episode_counter % config.target_update_freq < episodes_in_batch:
