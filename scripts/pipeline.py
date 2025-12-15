@@ -34,7 +34,7 @@ class PipelineConfig:
     gamma: float = 0.99
     lr: float = 0.001
     hidden_dim: int = 64
-    history_len: int = 2
+    history_len: int = 1
     train_limit: int = 100
     eval_limit: int = 20
     baseline: bool = True
@@ -79,7 +79,7 @@ def main():
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--hidden_dim", type=int, default=64)
-    parser.add_argument("--history_len", type=int, default=2)
+    parser.add_argument("--history_len", type=int, default=1)
     parser.add_argument("--train_limit", type=int, default=100)
     parser.add_argument("--eval_limit", type=int, default=20)
     parser.add_argument("--no_baseline", action="store_true")

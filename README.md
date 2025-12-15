@@ -21,7 +21,7 @@ No ILS tradicional, a cada iteração aplicamos uma perturbação seguida de uma
 
 ## Modelagem MDP
 
-### Estado (contínuo, 45 dimensões)
+### Estado (contínuo, 3 + 16×history_len dims; padrão 19)
 
 O estado é um vetor contínuo que captura:
 
@@ -30,7 +30,7 @@ O estado é um vetor contínuo que captura:
 | `g` | 1 | Gap atual normalizado (log scale) |
 | `g_best` | 1 | Melhor gap do episódio (normalizado) |
 | `t_ratio` | 1 | Tempo restante / T ∈ [0, 1] |
-| `history` | 42 | Últimas 2 ações (one-hot encoded, 21 cada) |
+| `history` | 16×h | Últimas h ações one-hot (h=history_len; padrão 1) |
 
 **Normalização do gap:** `g_norm = log(1 + gap) / log(101)` — comprime gaps grandes, preserva resolução em gaps pequenos.
 
@@ -46,25 +46,32 @@ reward = g_best_old - g_best_new
 - Alinha o sinal de recompensa com o objetivo real (minimizar gap)
 - Sparse mas informativo
 
-### Ações (21)
+### Ações (16)
 
-Cada ação é um par **(perturbação, busca local)**, com variantes de 2-opt expostas individualmente:
+Cada ação é um par **(perturbação, busca local)**. Baseado em análise empírica de modelos treinados, removemos operadores pouco usados (two_opt_nn ~4%, random) e adicionamos GRASP parametrizado.
 
-**Perturbações leves** (0-7):
+**Perturbações leves** (0-4):
 | Ação | Perturbação | Busca Local |
 |------|-------------|-------------|
-| 0-3 | two_swap | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
-| 4-7 | segment_reverse | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
+| 0-2 | two_swap | 2-opt_dlb, 2-opt_full, LK |
+| 3-4 | segment_reverse | 2-opt_dlb, 2-opt_full |
 
-**Perturbações destrutivas** (8-20):
+**Restart com construtivas** (5-9):
 | Ação | Perturbação | Busca Local |
 |------|-------------|-------------|
-| 8-10 | random | 2-opt_full, 2-opt_nn, 2-opt_dlb |
-| 11-14 | nearest | 2-opt_full, 2-opt_nn, 2-opt_dlb, LK |
-| 15-17 | cheapest | 2-opt_full, 2-opt_nn, 2-opt_dlb |
-| 18-20 | grasp | 2-opt_full, 2-opt_nn, 2-opt_dlb |
+| 5-7 | nearest | 2-opt_dlb, 2-opt_full, LK |
+| 8-9 | cheapest | 2-opt_dlb, 2-opt_full |
 
-O agente aprende qual variante de 2-opt usar em cada situação. Operadores lentos são naturalmente penalizados pelo desconto temporal.
+**GRASP parametrizado** (10-15):
+| Ação | Perturbação | Busca Local |
+|------|-------------|-------------|
+| 10-11 | grasp α=0.03 | 2-opt_dlb, 2-opt_full |
+| 12-13 | grasp α=0.1 | 2-opt_dlb, 2-opt_full |
+| 14-15 | grasp α=0.3 | 2-opt_dlb, 2-opt_full |
+
+- **α=0.03**: quase-guloso, mínima diversificação
+- **α=0.1**: balanço entre qualidade e diversificação
+- **α=0.3**: mais aleatório, substitui "random" com diversificação controlada
 
 ## Estrutura do Projeto
 
@@ -197,11 +204,11 @@ print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")
 from src import TSPInstance, DQNEnv, N_ACTIONS
 
 instance = TSPInstance("data/EUC_2D.json", instance_id=0)
-env = DQNEnv(instance, time_budget=5.0, history_len=2)
+env = DQNEnv(instance, time_budget=5.0)
 
 state = env.reset()
-print(f"State dim: {env.state_dim}")  # 45
-print(f"N_ACTIONS: {N_ACTIONS}")      # 21
+print(f"State dim: {env.state_dim}")  # 19
+print(f"N_ACTIONS: {N_ACTIONS}")      # 16
 
 while True:
     action = 0  # ou política aprendida
@@ -232,7 +239,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 class DQNConfig:
     # Ambiente
     time_budget: float = 10.0   # T(n) = (n/100)² * time_budget
-    history_len: int = 2        # Ações no histórico
+    history_len: int = 1        # Ações no histórico
 
     # DQN
     gamma: float = 0.99
@@ -255,40 +262,35 @@ class DQNConfig:
 ## Arquitetura da Rede
 
 ```
-QNetwork: state (45) -> Linear(64) -> ReLU -> Linear(64) -> ReLU -> Linear(21)
+QNetwork: state (19) -> Linear(64) -> ReLU -> Linear(64) -> ReLU -> Linear(16)
 ```
 
-- Input: estado contínuo (45 dims com history_len=2 e 21 ações)
-- Output: Q-values para cada uma das 21 ações
-- ~6K parâmetros
+- Input: estado contínuo (19 dims com history_len=1 e 16 ações)
+- Output: Q-values para cada uma das 16 ações
+- ~3K parâmetros
 
 ## Operadores TSP
 
-### Buscas Locais (4 variantes)
+### Buscas Locais (usadas nas ações)
 
 | Variante | Complexidade | Descrição |
 |----------|--------------|-----------|
-| `two_opt_full` | O(n²) | Melhor qualidade, mais lento |
-| `two_opt_nn` | O(n·k) | Neighbor lists, bom equilíbrio |
-| `two_opt_dlb` | O(n·k) | Don't look bits, mais rápido |
-| `lin_kernighan` | Variável | Cadeias de 2-opt com depth=2 |
+| `two_opt_dlb` | O(n·k) | Don't look bits, rápido (exploração) |
+| `two_opt_full` | O(n²) | Melhor qualidade (intensificação) |
+| `lin_kernighan` | Variável | Cadeias de 2-opt, depth=2 |
 
-O parâmetro `k` (número de vizinhos) para `two_opt_nn` e `two_opt_dlb`:
-- **int**: usado diretamente (ex: `k=20`)
-- **float em (0,1)**: proporção de n (ex: `k=0.5` = 50% das cidades)
-- **Default**: `k=0.5`
+Todas as variantes usam kernels Numba JIT (~20-100x mais rápido que Python puro).
 
 ### Perturbações Leves
 
 - **two_swap**: Troca 2 vértices aleatórios
 - **segment_reverse**: Reverte segmento aleatório do tour
 
-### Construtivas (perturbações destrutivas)
+### Construtivas (restart)
 
-- **random**: Tour aleatório
 - **nearest**: Vizinho mais próximo
 - **cheapest**: Inserção mais barata
-- **grasp**: GRASP com RCL (α=0.2)
+- **grasp_α**: GRASP parametrizado (α ∈ {0.03, 0.1, 0.3})
 
 ## Dados
 
@@ -296,6 +298,23 @@ O parâmetro `k` (número de vizinhos) para `two_opt_nn` e `two_opt_dlb`:
 - **10 tamanhos**: 10, 20, ..., 100 nós
 - **11.110 instâncias por tipo** (1.111 por tamanho)
 - **Split**: 90% treino, 10% teste (seed=42)
+
+## Outputs do Pipeline
+
+O pipeline gera os seguintes arquivos em `data/plots/`:
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `{type}_n{size}_learning_curve.png` | Curva de aprendizado (gap por episódio) |
+| `{type}_n{size}_action_dist.png` | Distribuição de ações (últimos 10% episódios) |
+| `{type}_n{size}_q_heatmap.png` | Heatmap Q-values (gap × ação, t=50%) |
+| `{type}_n{size}_q_heatmap_time.png` | Heatmap comparativo: t=80% vs t=20% |
+| `{type}_gaps_violin.png` | Violin plot de gaps por tamanho |
+| `{type}_time_vs_gap.png` | Scatter tempo × gap |
+
+O heatmap comparativo (`*_q_heatmap_time.png`) mostra como a política muda com o tempo restante:
+- **Top (80%)**: Início do episódio — espera-se mais diversificação (GRASP, restarts)
+- **Bottom (20%)**: Fim do episódio — espera-se mais intensificação (perturbações leves)
 
 ## Referências
 

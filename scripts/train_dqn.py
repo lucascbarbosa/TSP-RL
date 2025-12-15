@@ -29,7 +29,7 @@ def run_training(
     gamma: float = 0.99,
     lr: float = 0.001,
     hidden_dim: int = 64,
-    history_len: int = 2,
+    history_len: int = 1,
     device: str = "cpu",
     workers: int = 1,
     train_limit: int | None = None,
@@ -179,7 +179,7 @@ def main() -> None:
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--hidden_dim", type=int, default=64)
-    parser.add_argument("--history_len", type=int, default=2)
+    parser.add_argument("--history_len", type=int, default=1)
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
     parser.add_argument(
         "--workers", type=int, default=1, help=f"Parallel workers (max recommended: {get_default_workers()})"

@@ -7,11 +7,10 @@ from typing import Optional
 import numpy as np
 
 from src.rl.dqn.state import DQNState, normalize_gap, compute_delta_reward
-from src.tsp.constructive import CONSTRUCTIVES
+from src.tsp.constructive import CONSTRUCTIVES, grasp
 from src.tsp.instance import TSPInstance
 from src.tsp.local_search import (
     two_opt_full,
-    two_opt_nn,
     two_opt_dlb,
     lin_kernighan,
     _build_neighbor_lists,
@@ -22,40 +21,53 @@ from src.tsp.perturbation import PERTURBATIONS
 from src.tsp.solution import Solution
 
 
-# Action decoding: maps action index to (perturbation, local_search) pair
-# Expanded to expose individual 2-opt variants (full/nn/dlb) as separate actions
-# This allows the agent to learn which variant is best for each situation
+# =============================================================================
+# Action Space Design (16 actions)
+# =============================================================================
+# Based on empirical analysis of action usage in trained models:
+# - Removed: two_opt_nn (4.1% usage), random (replaced by grasp)
+# - Added: GRASP with multiple alpha values for controlled diversification
+#
+# Perturbations:
+#   - two_swap/segment_reverse: Light perturbations
+#   - nearest/cheapest: Restart with constructive heuristic
+#   - grasp_X: GRASP with alpha=X (0.03=almost greedy, 0.1=balanced, 0.3=diverse)
+#
+# Local searches:
+#   - two_opt_dlb: Fast, good for exploration (Don't Look Bits)
+#   - two_opt_full: Best quality, slower
+#   - lin_kernighan: Variable-depth search, best for intensification
+
 ACTION_DECODE: dict[int, tuple[str, str]] = {
-    # Light perturbations with all local searches
-    0: ("two_swap", "two_opt_full"),
-    1: ("two_swap", "two_opt_nn"),
-    2: ("two_swap", "two_opt_dlb"),
-    3: ("two_swap", "lin_kernighan"),
+    # Light perturbation (two_swap)
+    0: ("two_swap", "two_opt_dlb"),
+    1: ("two_swap", "two_opt_full"),
+    2: ("two_swap", "lin_kernighan"),
+    # Light perturbation (segment_reverse)
+    3: ("segment_reverse", "two_opt_dlb"),
     4: ("segment_reverse", "two_opt_full"),
-    5: ("segment_reverse", "two_opt_nn"),
-    6: ("segment_reverse", "two_opt_dlb"),
-    7: ("segment_reverse", "lin_kernighan"),
-    # Destructive perturbations (constructives) with 2-opt variants
-    8: ("random", "two_opt_full"),
-    9: ("random", "two_opt_nn"),
-    10: ("random", "two_opt_dlb"),
-    11: ("nearest", "two_opt_full"),
-    12: ("nearest", "two_opt_nn"),
-    13: ("nearest", "two_opt_dlb"),
-    14: ("nearest", "lin_kernighan"),  # Restart + intensification
-    15: ("cheapest", "two_opt_full"),
-    16: ("cheapest", "two_opt_nn"),
-    17: ("cheapest", "two_opt_dlb"),
-    18: ("grasp", "two_opt_full"),
-    19: ("grasp", "two_opt_nn"),
-    20: ("grasp", "two_opt_dlb"),
+    # Restart with nearest neighbor
+    5: ("nearest", "two_opt_dlb"),
+    6: ("nearest", "two_opt_full"),
+    7: ("nearest", "lin_kernighan"),
+    # Restart with cheapest insertion
+    8: ("cheapest", "two_opt_dlb"),
+    9: ("cheapest", "two_opt_full"),
+    # GRASP alpha=0.03 (almost greedy, minimal diversification)
+    10: ("grasp_0.03", "two_opt_dlb"),
+    11: ("grasp_0.03", "two_opt_full"),
+    # GRASP alpha=0.1 (balanced diversification)
+    12: ("grasp_0.1", "two_opt_dlb"),
+    13: ("grasp_0.1", "two_opt_full"),
+    # GRASP alpha=0.3 (more random, replaces "random" constructive)
+    14: ("grasp_0.3", "two_opt_dlb"),
+    15: ("grasp_0.3", "two_opt_full"),
 }
 N_ACTIONS = len(ACTION_DECODE)
 
 # Local search dispatch
 LOCAL_SEARCH_DISPATCH = {
     "two_opt_full": two_opt_full,
-    "two_opt_nn": two_opt_nn,
     "two_opt_dlb": two_opt_dlb,
     "lin_kernighan": lin_kernighan,
 }
@@ -78,7 +90,7 @@ class DQNEnv:
         self,
         instance: TSPInstance,
         time_budget: float,
-        history_len: int = 2,
+        history_len: int = 1,
         k: int | float = 0.5,
     ) -> None:
         """
@@ -196,11 +208,21 @@ class DQNEnv:
 
     def _apply_perturbation(self, solution: Solution, pert_type: str) -> Solution:
         """Apply perturbation to solution."""
+        # Light perturbations (modify existing solution)
         if pert_type in PERTURBATIONS:
             return PERTURBATIONS[pert_type](solution)
+
+        # GRASP with parametric alpha (e.g., "grasp_0.1")
+        if pert_type.startswith("grasp_"):
+            alpha = float(pert_type.split("_")[1])
+            tour, _ = grasp(self.instance, alpha=alpha)
+            return Solution(tour, self.dist_matrix, is_closed=True)
+
+        # Standard constructives (nearest, cheapest, etc.)
         if pert_type in CONSTRUCTIVES:
             tour, _ = CONSTRUCTIVES[pert_type](self.instance)
             return Solution(tour, self.dist_matrix, is_closed=True)
+
         raise ValueError(f"Unknown perturbation: {pert_type}")
 
     def _apply_local_search(self, solution: Solution, ls_type: str) -> Solution:
@@ -210,8 +232,8 @@ class DQNEnv:
 
         ls_func = LOCAL_SEARCH_DISPATCH[ls_type]
 
-        # 2-opt variants can use pre-computed neighbor lists
-        if ls_type in ("two_opt_nn", "two_opt_dlb"):
+        # two_opt_dlb can use pre-computed neighbor lists
+        if ls_type == "two_opt_dlb":
             return ls_func(solution, neighbors=self._neighbors)
         else:
             return ls_func(solution)

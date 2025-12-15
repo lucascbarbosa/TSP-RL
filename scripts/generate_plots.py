@@ -26,6 +26,7 @@ from utils import (
     plot_learning_curve,
     plot_action_distribution,
     plot_q_values_heatmap,
+    plot_q_values_heatmap_time_comparison,
     plot_gap_violins_by_size_method,
     plot_time_vs_gap_scatter,
     load_gaps_by_type_method,
@@ -37,15 +38,19 @@ def generate_action_labels() -> dict[int, str]:
     """Generate short action labels from ACTION_DECODE."""
     labels = {}
     for action_id, (pert, ls) in ACTION_DECODE.items():
-        # Shorten names
-        pert_short = {
-            "two_swap": "swap",
-            "segment_reverse": "rev",
-            "random": "rand",
-            "nearest": "near",
-            "cheapest": "cheap",
-            "grasp": "grasp",
-        }.get(pert, pert[:4])
+        # Shorten perturbation names
+        if pert.startswith("grasp_"):
+            # grasp_0.03 -> gr1, grasp_0.1 -> gr2, grasp_0.3 -> gr3
+            alpha = pert.split("_")[1]
+            pert_short = {"0.03": "gr1", "0.1": "gr2", "0.3": "gr3"}.get(alpha, "gr?")
+        else:
+            pert_short = {
+                "two_swap": "swap",
+                "segment_reverse": "rev",
+                "random": "rand",
+                "nearest": "near",
+                "cheapest": "cheap",
+            }.get(pert, pert[:4])
 
         ls_short = {
             "two_opt_full": "2opt",
@@ -81,7 +86,14 @@ def run_plots(
 
     action_labels = generate_action_labels()
     action_labels_list = [action_labels.get(i, f"A{i}") for i in range(N_ACTIONS)]
-    generated = {"learning_curves": [], "action_dists": [], "heatmaps": [], "violins": [], "scatters": []}
+    generated = {
+        "learning_curves": [],
+        "action_dists": [],
+        "heatmaps": [],
+        "heatmaps_time": [],
+        "violins": [],
+        "scatters": [],
+    }
 
     # Find model files
     model_paths = sorted(glob(models_pattern))
@@ -147,6 +159,25 @@ def run_plots(
             generated["heatmaps"].append(str(plot_path))
             if verbose:
                 print(f"  Saved: {plot_path}")
+
+            # Q-values time comparison heatmap (80% vs 20% time remaining)
+            q_matrix_early = compute_q_matrix(model, t_ratio=0.8)
+            q_matrix_late = compute_q_matrix(model, t_ratio=0.2)
+
+            plot_path_time = output_dir / f"{name}_q_heatmap_time.png"
+            plot_q_values_heatmap_time_comparison(
+                q_matrix_early,
+                q_matrix_late,
+                gap_labels,
+                act_labels,
+                title=f"Q-values by Time: {name}",
+                save_path=plot_path_time,
+                t_early=0.8,
+                t_late=0.2,
+            )
+            generated["heatmaps_time"].append(str(plot_path_time))
+            if verbose:
+                print(f"  Saved: {plot_path_time}")
         except Exception as e:
             if verbose:
                 print(f"  Error generating Q-heatmap: {e}")
