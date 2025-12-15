@@ -266,7 +266,7 @@ class DQNConfig:
     lr: float = 0.001
     batch_size: int = 64
     buffer_size: int = 50000
-    target_update_freq: int = 50
+    target_update_freq: int = 16
 
     # Exploração
     epsilon_start: float = 1.0

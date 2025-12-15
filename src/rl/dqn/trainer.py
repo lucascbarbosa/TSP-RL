@@ -124,7 +124,7 @@ class DQNConfig:
     lr: float = 0.001  # Learning rate
     batch_size: int = 64
     buffer_size: int = 50000
-    target_update_freq: int = 50  # Episodes between target updates
+    target_update_freq: int = 16  # Episodes between target updates
 
     # Double DQN: use online network for action selection, target for evaluation
     # Reduces overestimation bias in Q-values

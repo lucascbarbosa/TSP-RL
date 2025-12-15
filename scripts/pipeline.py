@@ -29,14 +29,14 @@ class PipelineConfig:
 
     types: list[str] = field(default_factory=lambda: ["EUC_2D"])
     sizes: list[int] = field(default_factory=lambda: [10, 20])
-    episodes: int = 200
+    episodes: int = 400
     time_budget: float = 10.0
     gamma: float = 0.99
     lr: float = 0.001
     hidden_dim: int = 64
     history_len: int = 1
     train_limit: int = 100
-    eval_limit: int = 20
+    eval_limit: int = 50
     baseline: bool = True
     device: str = "cpu"
     workers: int = 16
