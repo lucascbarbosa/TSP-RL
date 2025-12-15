@@ -79,8 +79,9 @@ def run_comparison(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    plots_dir = output_dir / "plots"
-    plots_dir.mkdir(exist_ok=True)
+    # Plots go to data/plots/ (alongside other pipeline plots)
+    plots_dir = Path("data/plots")
+    plots_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_path = f"data/{inst_type}.json"
     if dataset_path not in splits:
@@ -201,29 +202,29 @@ def run_comparison(
         if verbose:
             print(f"\nGenerating comparison plots...")
 
-        # 1. Learning curves
+        # 1. Learning curves comparison
         plot_learning_curves_comparison(
             all_stats,
             all_labels,
             title=f"Learning Curves: {inst_type} n={size}",
-            save_path=plots_dir / f"{inst_type}_n{size:03d}_learning_curves.png",
+            save_path=plots_dir / f"{inst_type}_n{size:03d}_learning_curve_comparison.png",
         )
 
-        # 2. Q-values evolution
+        # 2. Q-values evolution comparison
         plot_q_values_comparison(
             all_stats,
             all_labels,
             title=f"Q-values Evolution: {inst_type} n={size}",
-            save_path=plots_dir / f"{inst_type}_n{size:03d}_q_values.png",
+            save_path=plots_dir / f"{inst_type}_n{size:03d}_q_values_comparison.png",
         )
 
-        # 3. Action distributions
+        # 3. Action distributions comparison
         plot_action_distribution_comparison(
             all_stats,
             all_labels,
             action_labels=action_labels,
             title=f"Action Distribution (last 10% episodes): {inst_type} n={size}",
-            save_path=plots_dir / f"{inst_type}_n{size:03d}_actions.png",
+            save_path=plots_dir / f"{inst_type}_n{size:03d}_action_dist_comparison.png",
         )
 
         results[size] = size_results
@@ -242,7 +243,7 @@ def run_comparison(
 
     if verbose:
         print(f"\nResults saved to: {output_dir}")
-        print(f"Plots saved to: {plots_dir}")
+        print(f"Plots saved to: {plots_dir}/")
 
     return results
 

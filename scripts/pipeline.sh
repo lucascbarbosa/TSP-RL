@@ -23,6 +23,7 @@ HISTORY_LEN=1
 TRAIN_LIMIT=100
 EVAL_LIMIT=20
 BASELINE=""
+COMPARE_DOUBLE=""
 DEVICE="cpu"
 WORKERS=16
 
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
         --train_limit)  TRAIN_LIMIT="$2"; shift 2 ;;
         --eval_limit)   EVAL_LIMIT="$2"; shift 2 ;;
         --no_baseline)  BASELINE="--no_baseline"; shift ;;
+        --no_compare_double) COMPARE_DOUBLE="--no_compare_double"; shift ;;
         --device)       DEVICE="$2"; shift 2 ;;
         --workers)      WORKERS="$2"; shift 2 ;;
         --help|-h)
@@ -64,4 +66,5 @@ exec python scripts/pipeline.py \
     --eval_limit "$EVAL_LIMIT" \
     --device "$DEVICE" \
     --workers "$WORKERS" \
-    $BASELINE
+    $BASELINE \
+    $COMPARE_DOUBLE

@@ -40,6 +40,7 @@ class PipelineConfig:
     baseline: bool = True
     device: str = "cpu"
     workers: int = 16
+    compare_double: bool = True  # Run DQN vs Double DQN comparison
 
 
 def format_duration(seconds: float) -> str:
@@ -83,6 +84,7 @@ def main():
     parser.add_argument("--train_limit", type=int, default=100)
     parser.add_argument("--eval_limit", type=int, default=20)
     parser.add_argument("--no_baseline", action="store_true")
+    parser.add_argument("--no_compare_double", action="store_true", help="Skip DQN vs Double DQN comparison")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--workers", type=int, default=16)
     args = parser.parse_args()
@@ -99,6 +101,7 @@ def main():
         train_limit=args.train_limit,
         eval_limit=args.eval_limit,
         baseline=not args.no_baseline,
+        compare_double=not args.no_compare_double,
         device=args.device,
         workers=args.workers,
     )
@@ -109,6 +112,7 @@ def main():
     from scripts.generate_splits import run_generate_splits
     from scripts.train_dqn import run_training
     from scripts.evaluate_dqn import run_evaluation
+    from scripts.compare_dqn_double import run_comparison
     from scripts.generate_plots import run_plots
     from glob import glob
 
@@ -169,14 +173,37 @@ def main():
 
     timings["evaluation"], _ = run_step("3. Evaluating models", step_evaluate)
 
-    # Step 4: Generate plots
+    # Step 4: Compare DQN vs Double DQN
+    def step_compare():
+        if not config.compare_double:
+            print("   Skipped (--no_compare_double)")
+            return
+        for inst_type in config.types:
+            run_comparison(
+                inst_type=inst_type,
+                sizes=config.sizes,
+                splits=splits,
+                episodes=config.episodes,
+                time_budget=config.time_budget,
+                gamma=config.gamma,
+                lr=config.lr,
+                hidden_dim=config.hidden_dim,
+                history_len=config.history_len,
+                device=config.device,
+                workers=config.workers,
+                train_limit=config.train_limit,
+            )
+
+    timings["comparison"], _ = run_step("4. DQN vs Double DQN comparison", step_compare)
+
+    # Step 5: Generate plots
     def step_plots():
         run_plots(
             models_pattern="models/dqn/*.pt",
             results_pattern="data/results/*.csv",
         )
 
-    timings["plots"], _ = run_step("4. Generating plots", step_plots)
+    timings["plots"], _ = run_step("5. Generating plots", step_plots)
 
     # Summary
     end_time = datetime.now()

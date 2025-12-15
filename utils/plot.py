@@ -260,12 +260,12 @@ def plot_learning_curves_comparison(
         episodes = np.arange(1, len(gaps) + 1)
         color = colors[i % len(colors)]
 
-        ax.plot(episodes, gaps, color=color, alpha=0.15, linewidth=0.5)
+        ax.plot(episodes, gaps, color=color, alpha=0.4, linewidth=0.8)
 
         if len(gaps) >= window:
             ma = np.convolve(gaps, np.ones(window) / window, mode="valid")
             ma_episodes = episodes[window - 1 :]
-            ax.plot(ma_episodes, ma, color=color, linewidth=2, label=f"{label} (MA-{window})")
+            ax.plot(ma_episodes, ma, color=color, linewidth=2.5, label=f"{label} (MA-{window})")
 
     ax.set_xlabel("Episode")
     ax.set_ylabel("Best Gap (%)")
@@ -316,19 +316,19 @@ def plot_q_values_comparison(
         q_mean = np.array(stats.get("q_values_mean", []))
         if len(q_mean) > 0:
             updates = np.arange(1, len(q_mean) + 1)
-            axes[0].plot(updates, q_mean, color=color, alpha=0.1, linewidth=0.3)
+            axes[0].plot(updates, q_mean, color=color, alpha=0.35, linewidth=0.5)
             if len(q_mean) >= window:
                 ma = np.convolve(q_mean, np.ones(window) / window, mode="valid")
-                axes[0].plot(np.arange(window, len(q_mean) + 1), ma, color=color, linewidth=1.5, label=label)
+                axes[0].plot(np.arange(window, len(q_mean) + 1), ma, color=color, linewidth=2, label=label)
 
         # Max Q-values
         q_max = np.array(stats.get("q_values_max", []))
         if len(q_max) > 0:
             updates = np.arange(1, len(q_max) + 1)
-            axes[1].plot(updates, q_max, color=color, alpha=0.1, linewidth=0.3)
+            axes[1].plot(updates, q_max, color=color, alpha=0.35, linewidth=0.5)
             if len(q_max) >= window:
                 ma = np.convolve(q_max, np.ones(window) / window, mode="valid")
-                axes[1].plot(np.arange(window, len(q_max) + 1), ma, color=color, linewidth=1.5, label=label)
+                axes[1].plot(np.arange(window, len(q_max) + 1), ma, color=color, linewidth=2, label=label)
 
     axes[0].set_xlabel("Update Step")
     axes[0].set_ylabel("Mean Q-value")
@@ -361,16 +361,23 @@ def plot_action_distribution_comparison(
     save_path: Optional[Union[str, Path]] = None,
 ) -> None:
     """
-    Plot action distributions comparing multiple DQN variants side by side.
+    Plot action distributions as a butterfly chart (diverging horizontal bars).
+
+    Left side shows first variant (e.g., DQN), right side shows second (e.g., Double DQN).
+    Central vertical line at zero, with frequencies growing outward in both directions.
 
     Args:
-        stats_list: List of dicts with 'action_counts' key.
+        stats_list: List of dicts with 'action_counts' key (expects exactly 2).
         labels: Label for each variant.
         action_labels: Labels for each action.
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
-    colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+    if len(stats_list) != 2:
+        # Fallback for non-binary comparisons
+        return _plot_action_distribution_comparison_fallback(stats_list, labels, action_labels, title, save_path)
+
+    colors = [COLORS["primary"], COLORS["secondary"]]
 
     # Get action counts
     all_counts = []
@@ -387,12 +394,112 @@ def plot_action_distribution_comparison(
         return
 
     n_actions = len(all_counts[0])
-    n_methods = len(stats_list)
 
     if action_labels is None:
         action_labels = [f"A{i}" for i in range(n_actions)]
 
     # Convert to percentages
+    percentages = []
+    for counts in all_counts:
+        total = sum(counts)
+        if total > 0:
+            percentages.append([100 * c / total for c in counts])
+        else:
+            percentages.append([0] * n_actions)
+
+    fig, ax = plt.subplots(figsize=(10, max(5, n_actions * 0.35)))
+
+    y_positions = np.arange(n_actions)
+    bar_height = 0.7
+
+    # Left side (first variant) - negative values for left-growing bars
+    left_pcts = [-p for p in percentages[0]]
+    ax.barh(
+        y_positions,
+        left_pcts,
+        height=bar_height,
+        color=colors[0],
+        alpha=0.8,
+        label=labels[0],
+    )
+
+    # Right side (second variant) - positive values for right-growing bars
+    right_pcts = percentages[1]
+    ax.barh(
+        y_positions,
+        right_pcts,
+        height=bar_height,
+        color=colors[1],
+        alpha=0.8,
+        label=labels[1],
+    )
+
+    # Central vertical line at zero
+    ax.axvline(x=0, color="#333333", linewidth=1.2)
+
+    # Symmetric x-axis limits
+    max_pct = max(max(percentages[0]), max(percentages[1]))
+    limit = max(10, max_pct * 1.15)  # At least 10%, with some padding
+    ax.set_xlim(-limit, limit)
+
+    # X-axis: show absolute values (no negative signs)
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{abs(x):.0f}"))
+    ax.set_xlabel("Frequency (%)")
+
+    # Y-axis
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(action_labels, fontsize=9)
+    ax.set_ylabel("Action")
+    ax.invert_yaxis()
+
+    # Legend at top
+    ax.legend(loc="upper center", ncol=2, framealpha=0.9, bbox_to_anchor=(0.5, -0.08))
+
+    # Add variant labels on each side
+    ax.text(-limit * 0.5, -0.8, labels[0], ha="center", va="bottom", fontsize=10, fontweight="bold", color=colors[0])
+    ax.text(limit * 0.5, -0.8, labels[1], ha="center", va="bottom", fontsize=10, fontweight="bold", color=colors[1])
+
+    if title:
+        ax.set_title(title, pad=10)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+
+def _plot_action_distribution_comparison_fallback(
+    stats_list: List[dict],
+    labels: List[str],
+    action_labels: Optional[List[str]] = None,
+    title: Optional[str] = None,
+    save_path: Optional[Union[str, Path]] = None,
+) -> None:
+    """Fallback for non-binary comparisons (clustered horizontal bars)."""
+    colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
+
+    all_counts = []
+    for stats in stats_list:
+        counts = stats.get("action_counts", {})
+        if isinstance(counts, dict):
+            int_counts = {int(k): v for k, v in counts.items()}
+            n_actions = max(int_counts.keys()) + 1 if int_counts else 0
+            counts = [int_counts.get(i, 0) for i in range(n_actions)]
+        all_counts.append(counts)
+
+    if not all_counts or not all_counts[0]:
+        return
+
+    n_actions = len(all_counts[0])
+    n_methods = len(stats_list)
+
+    if action_labels is None:
+        action_labels = [f"A{i}" for i in range(n_actions)]
+
     percentages = []
     for counts in all_counts:
         total = sum(counts)
@@ -409,12 +516,7 @@ def plot_action_distribution_comparison(
     for i, (pcts, label) in enumerate(zip(percentages, labels)):
         offset = (i - (n_methods - 1) / 2) * bar_height
         ax.barh(
-            y_positions + offset,
-            pcts,
-            height=bar_height * 0.9,
-            color=colors[i % len(colors)],
-            alpha=0.7,
-            label=label,
+            y_positions + offset, pcts, height=bar_height * 0.9, color=colors[i % len(colors)], alpha=0.7, label=label
         )
 
     ax.set_yticks(y_positions)
