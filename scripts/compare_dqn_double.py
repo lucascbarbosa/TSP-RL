@@ -247,7 +247,7 @@ def run_comparison(
                 if verbose and stats_dict["test_avg_gap"] is not None:
                     unsup = stats_dict["test_avg_gap_unsup"]
                     print(
-                        f"  Test: sup={stats_dict['test_avg_gap']:.2f}% ± {stats_dict['test_std_gap']:.2f}%, unsup={unsup:.2f}%"
+                        f"  Test: Supervised={stats_dict['test_avg_gap']:.2f}% ± {stats_dict['test_std_gap']:.2f}%, Unsupervised={unsup:.2f}%"
                     )
 
         # Generate comparison plots with hyperparameters in title

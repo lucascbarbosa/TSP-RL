@@ -15,6 +15,7 @@ build/
 secrets.secrets
 data/tsplib
 data/train
+data/run-001/
 **/old/
 
 # LaTeX

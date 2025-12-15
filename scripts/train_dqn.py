@@ -160,7 +160,9 @@ def run_training(
                 test_std_gap = float(np.std(test_gaps))
                 test_avg_gap_unsup = float(np.mean(test_gaps_unsup))
                 if verbose:
-                    print(f"  Test: sup={test_avg_gap:.2f}% ± {test_std_gap:.2f}%, unsup={test_avg_gap_unsup:.2f}%")
+                    print(
+                        f"  Test: Supervised={test_avg_gap:.2f}% ± {test_std_gap:.2f}%, Unsupervised={test_avg_gap_unsup:.2f}%"
+                    )
 
             # Determine filename suffix
             if compare_variants:

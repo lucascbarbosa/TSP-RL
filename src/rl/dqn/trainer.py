@@ -465,7 +465,7 @@ def _train_dqn_sequential(
         if verbose and (episode + 1) % 100 == 0:
             recent_gaps = stats.episode_best_gaps[-100:]
             avg_gap = np.mean(recent_gaps)
-            print(f"Episode {episode + 1}/{config.n_episodes} | " f"Unsup gap: {avg_gap:.2f}% | " f"ε: {epsilon:.3f}")
+            print(f"Episode {episode + 1}/{config.n_episodes} | Unsupervised gap: {avg_gap:.2f}% | ε: {epsilon:.3f}")
 
     return q_net, stats
 
@@ -604,7 +604,7 @@ def _train_dqn_parallel(
                 current_epsilon = stats.epsilons[-1] if stats.epsilons else config.epsilon_start
                 print(
                     f"Episode {episode_counter}/{config.n_episodes} | "
-                    f"Unsup gap: {avg_gap:.2f}% | "
+                    f"Unsupervised gap: {avg_gap:.2f}% | "
                     f"ε: {current_epsilon:.3f}"
                 )
 
@@ -730,7 +730,7 @@ def evaluate_dqn(
 
         if verbose:
             for i, (gb, go) in enumerate(zip(gaps_base, gaps_opt)):
-                print(f"Instance {i + 1}/{len(gaps_base)}: sup={go:.2f}%, unsup={gb:.2f}%")
+                print(f"Instance {i + 1}/{len(gaps_base)}: Supervised={go:.2f}%, Unsupervised={gb:.2f}%")
 
         return gaps_base, gaps_opt
 
@@ -760,7 +760,7 @@ def evaluate_dqn(
         gaps_opt.append(gap_opt)
 
         if verbose:
-            print(f"Instance {i + 1}/{len(instances)}: sup={gap_opt:.2f}%, unsup={gap_base:.2f}%")
+            print(f"Instance {i + 1}/{len(instances)}: Supervised={gap_opt:.2f}%, Unsupervised={gap_base:.2f}%")
 
     return gaps_base, gaps_opt
 

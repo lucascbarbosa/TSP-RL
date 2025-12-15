@@ -151,10 +151,10 @@ def plot_learning_curve(
         ax.plot(ma_episodes, ma, color=COLORS["primary"], linewidth=2, label=f"Moving avg ({window} ep)")
 
     ax.set_xlabel("Episode")
-    ax.set_ylabel("Best Gap (%)")
+    ax.set_ylabel("Unsupervised Gap (%)")  # Gap vs baseline (can be negative)
     ax.set_xlim(0, len(episodes))
-    ax.set_ylim(bottom=0)
-    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    # Note: no bottom limit since gaps vs baseline can be negative (agent beats baseline)
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7, label="Baseline")
     ax.legend(loc="upper right", framealpha=0.9)
 
     if title:
@@ -268,10 +268,10 @@ def plot_learning_curves_comparison(
             ax.plot(ma_episodes, ma, color=color, linewidth=2.5, label=f"{label} (MA-{window})")
 
     ax.set_xlabel("Episode")
-    ax.set_ylabel("Best Gap (%)")
+    ax.set_ylabel("Unsupervised Gap (%)")  # Gap vs baseline (can be negative)
     ax.set_xlim(0, max(len(s["episode_best_gaps"]) for s in stats_list))
-    ax.set_ylim(bottom=0)
-    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7)
+    # Note: no bottom limit since gaps vs baseline can be negative (agent beats baseline)
+    ax.axhline(y=0, color="#888888", linestyle="--", linewidth=0.8, alpha=0.7, label="Baseline")
     ax.legend(loc="upper right", framealpha=0.9)
 
     if title:
