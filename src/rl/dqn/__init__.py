@@ -1,4 +1,4 @@
-"""DQN components for Q-ILS.
+"""DQN components for DQN-ILS.
 
 This module provides Deep Q-Network components for learning
 (perturbation, local_search) selection policies.
@@ -18,6 +18,7 @@ from src.rl.dqn.state import DQNState, compute_delta_reward, normalize_gap
 from src.rl.dqn.trainer import (
     DQNConfig,
     TrainingStats,
+    compute_q_matrix,
     compute_time_budget,
     evaluate_dqn,
     load_model,
@@ -49,4 +50,5 @@ __all__ = [
     "compute_time_budget",
     "save_model",
     "load_model",
+    "compute_q_matrix",
 ]

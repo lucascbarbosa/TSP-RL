@@ -26,8 +26,9 @@ echo ""
 
 # Files/directories to clean
 TARGETS=(
-    "data/results"           # Evaluation outputs
     "data/splits.json"       # generate_splits.py output
+    "data/results"           # Evaluation CSVs
+    "data/plots"             # Generated plots
     "models/dqn"             # Trained DQN models
 )
 

@@ -183,7 +183,7 @@ def main() -> None:
         save_model(model, model_path)
         print(f"Model saved to: {model_path}")
 
-        # Save training stats
+        # Save training stats (summary + full data for plotting)
         stats_path = output_dir / f"{args.type}_n{size:03d}_stats.json"
         stats_dict = {
             "type": args.type,
@@ -193,6 +193,10 @@ def main() -> None:
             "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
             "test_avg_gap": float(avg_gap) if test_instances else None,
             "test_std_gap": float(std_gap) if test_instances else None,
+            # Full data for plotting
+            "episode_best_gaps": stats.episode_best_gaps,
+            "episode_rewards": stats.episode_rewards,
+            "losses": stats.losses,
         }
         with open(stats_path, "w") as f:
             json.dump(stats_dict, f, indent=2)
