@@ -37,6 +37,7 @@ class PipelineConfig:
     history_len: int = 1
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
+    reward_type: str = "delta"
     train_limit: int = 100
     val_limit: int = 40  # Validation instances during training (step 2)
     test_limit: int = 40  # Test instances for final evaluation (step 3)
@@ -86,6 +87,12 @@ def main():
     parser.add_argument("--history_len", type=int, default=1)
     parser.add_argument("--epsilon_start", type=float, default=1.0, help="Initial exploration rate")
     parser.add_argument("--epsilon_end", type=float, default=0.05, help="Final exploration rate")
+    parser.add_argument(
+        "--reward_type",
+        default="delta",
+        choices=["delta", "sparse"],
+        help="Reward type: delta (improvement) or sparse (end-only)",
+    )
     parser.add_argument("--train_limit", type=int, default=100)
     parser.add_argument("--val_limit", type=int, default=40, help="Validation instances during training (step 2)")
     parser.add_argument("--test_limit", type=int, default=40, help="Test instances for final evaluation (step 3)")
@@ -106,6 +113,7 @@ def main():
         history_len=args.history_len,
         epsilon_start=args.epsilon_start,
         epsilon_end=args.epsilon_end,
+        reward_type=args.reward_type,
         train_limit=args.train_limit,
         val_limit=args.val_limit,
         test_limit=args.test_limit,
@@ -141,6 +149,7 @@ def main():
     print(f"  History len:       {config.history_len}")
     print(f"  Epsilon start:     {config.epsilon_start}")
     print(f"  Epsilon end:       {config.epsilon_end}")
+    print(f"  Reward type:       {config.reward_type}")
     print(f"  Train limit:       {config.train_limit}")
     print(f"  Val limit:         {config.val_limit}")
     print(f"  Test limit:        {config.test_limit}")
@@ -180,6 +189,7 @@ def main():
                 history_len=config.history_len,
                 epsilon_start=config.epsilon_start,
                 epsilon_end=config.epsilon_end,
+                reward_type=config.reward_type,
                 device=config.device,
                 workers=config.workers,
                 train_limit=config.train_limit,

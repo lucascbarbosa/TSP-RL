@@ -22,6 +22,7 @@ HIDDEN_DIM=64
 HISTORY_LEN=1
 EPSILON_START=1.0
 EPSILON_END=0.05
+REWARD_TYPE="delta"
 TRAIN_LIMIT=100
 VAL_LIMIT=40
 TEST_LIMIT=40
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --history_len)  HISTORY_LEN="$2"; shift 2 ;;
         --epsilon_start) EPSILON_START="$2"; shift 2 ;;
         --epsilon_end)  EPSILON_END="$2"; shift 2 ;;
+        --reward_type)  REWARD_TYPE="$2"; shift 2 ;;
         --train_limit)  TRAIN_LIMIT="$2"; shift 2 ;;
         --val_limit)    VAL_LIMIT="$2"; shift 2 ;;
         --test_limit)   TEST_LIMIT="$2"; shift 2 ;;
@@ -70,6 +72,7 @@ exec python scripts/pipeline.py \
     --history_len "$HISTORY_LEN" \
     --epsilon_start "$EPSILON_START" \
     --epsilon_end "$EPSILON_END" \
+    --reward_type "$REWARD_TYPE" \
     --train_limit "$TRAIN_LIMIT" \
     --val_limit "$VAL_LIMIT" \
     --test_limit "$TEST_LIMIT" \

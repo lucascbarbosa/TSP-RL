@@ -148,6 +148,9 @@ class DQNConfig:
     # Parallelization
     n_workers: int = 1  # Number of parallel workers (1 = sequential)
 
+    # Reward type: "delta" (improvement-based) or "sparse" (end-only)
+    reward_type: str = "delta"
+
 
 @dataclass
 class TrainingStats:
@@ -242,7 +245,9 @@ def _episode_worker(args: tuple) -> dict:
 
     # Run episode (use baseline as reference for state computation)
     time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
-    env = DQNEnv(instance, time_budget, config_dict["history_len"], use_baseline=True)
+    env = DQNEnv(
+        instance, time_budget, config_dict["history_len"], use_baseline=True, reward_type=config_dict["reward_type"]
+    )
 
     state = env.reset()
     transitions = []
@@ -394,7 +399,7 @@ def _train_dqn_sequential(
 
         # Sample random instance (baseline already set in train_dqn)
         instance = random.choice(instances)
-        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
+        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True, reward_type=config.reward_type)
 
         # Collect episode
         state = env.reset()
@@ -540,6 +545,7 @@ def _train_dqn_parallel(
                 "n_episodes": config.n_episodes,
                 "epsilon_start": config.epsilon_start,
                 "epsilon_end": config.epsilon_end,
+                "reward_type": config.reward_type,
             }
 
             worker_args = [
@@ -648,7 +654,13 @@ def _eval_worker(args: tuple) -> tuple[float, float]:
 
     # Run evaluation episode (greedy policy, baseline as state reference)
     time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
-    env = DQNEnv(instance, time_budget, config_dict["history_len"], use_baseline=True)
+    env = DQNEnv(
+        instance,
+        time_budget,
+        config_dict["history_len"],
+        use_baseline=True,
+        reward_type=config_dict.get("reward_type", "delta"),
+    )
 
     state = env.reset()
     done = False
@@ -743,6 +755,7 @@ def evaluate_dqn(
             "time_budget": config.time_budget,
             "history_len": config.history_len,
             "hidden_dim": config.hidden_dim,
+            "reward_type": config.reward_type,
         }
 
         worker_args = [(inst_id, dataset_path, weights, config_dict, baselines) for inst_id in instance_ids]
@@ -771,7 +784,7 @@ def evaluate_dqn(
     gaps_opt = []
 
     for i, instance in enumerate(instances):
-        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
+        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True, reward_type=config.reward_type)
         state = env.reset()
         done = False
 

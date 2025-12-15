@@ -6,7 +6,7 @@ from typing import Optional
 
 import numpy as np
 
-from src.rl.dqn.state import DQNState, normalize_gap, compute_delta_reward
+from src.rl.dqn.state import DQNState, normalize_gap, compute_delta_reward, compute_sparse_reward
 from src.tsp.constructive import CONSTRUCTIVES, grasp
 from src.tsp.instance import TSPInstance
 from src.tsp.local_search import (
@@ -93,6 +93,7 @@ class DQNEnv:
         history_len: int = 1,
         k: int | float = 0.5,
         use_baseline: bool = True,
+        reward_type: str = "delta",
     ) -> None:
         """
         Initialize environment.
@@ -110,6 +111,7 @@ class DQNEnv:
         self.time_budget = time_budget
         self.history_len = history_len
         self.use_baseline = use_baseline
+        self.reward_type = reward_type
 
         # Reuse precomputed distance matrix
         self.dist_matrix = instance.dist_matrix
@@ -191,20 +193,26 @@ class DQNEnv:
         # Update solution
         self.solution = new_solution
 
-        # Compute reward (improvement in best gap relative to reference)
+        # Compute gap and update best
         gap = ((new_solution.cost - self.reference_cost) / self.reference_cost) * 100
         old_best = self.best_gap
         new_best = min(self.best_gap, gap)
-        reward = compute_delta_reward(old_best, new_best)
         self.best_gap = new_best
 
         # Update history
         self.history = self.history[1:] + [action]
 
         # Check if done (time budget exhausted)
-        # Note: we don't check for optimal anymore since reference may be baseline
         elapsed = time.perf_counter() - self.t_start
         done = bool(elapsed >= self.time_budget)
+
+        # Compute reward based on type
+        if self.reward_type == "sparse":
+            # Sparse: reward only at end of episode
+            reward = compute_sparse_reward(self.best_gap) if done else 0.0
+        else:
+            # Delta: reward for improvement
+            reward = compute_delta_reward(old_best, new_best)
 
         return self._get_state(), reward, done
 

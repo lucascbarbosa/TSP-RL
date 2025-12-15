@@ -65,6 +65,29 @@ def compute_delta_reward(g_best_old: float, g_best_new: float) -> float:
     return g_best_old - g_best_new
 
 
+def compute_sparse_reward(best_gap: float) -> float:
+    """
+    Compute end-of-episode reward based on final best gap.
+
+    Returns negative normalized gap (lower gap = higher reward).
+
+    Args:
+        best_gap: Best gap achieved during the episode (percentage).
+
+    Returns:
+        Reward in [-1, 1]. gap=-100% → +1.0, gap=0% → 0.0, gap=100% → -1.0.
+
+    Examples:
+        >>> compute_sparse_reward(0.0)  # Matched baseline
+        0.0
+        >>> compute_sparse_reward(-5.0)  # Beat baseline by 5%
+        0.39...
+        >>> compute_sparse_reward(5.0)  # 5% worse than baseline
+        -0.39...
+    """
+    return -normalize_gap(best_gap)
+
+
 @dataclass
 class DQNState:
     """
