@@ -63,6 +63,45 @@ def generate_action_labels() -> dict[int, str]:
     return labels
 
 
+def format_title(base_name: str, stats: dict) -> str:
+    """
+    Format plot title with model info and hyperparameters.
+
+    Args:
+        base_name: Base model name (e.g., "EUC_2D_n010_double")
+        stats: Stats dictionary with hyperparameters.
+
+    Returns:
+        Formatted title with variant and hyperparameters.
+    """
+    # Determine variant
+    use_double = stats.get("use_double_dqn", True)
+    variant = "Double DQN" if use_double else "DQN"
+
+    # Extract model identifier (e.g., "EUC_2D n=10")
+    parts = base_name.split("_")
+    if len(parts) >= 2 and parts[-1] in ("standard", "double"):
+        # Remove variant suffix from name
+        parts = parts[:-1]
+
+    # Find size from name (e.g., "n010" -> "n=10")
+    model_id = base_name
+    for p in parts:
+        if p.startswith("n") and p[1:].isdigit():
+            size = int(p[1:])
+            inst_type = "_".join(parts[: parts.index(p)])
+            model_id = f"{inst_type} n={size}"
+            break
+
+    # Format hyperparameters
+    episodes = stats.get("n_episodes", "?")
+    lr = stats.get("lr", "?")
+    gamma = stats.get("gamma", "?")
+    hp_str = f"ep={episodes}, lr={lr}, γ={gamma}"
+
+    return f"{model_id} ({variant})\n({hp_str})"
+
+
 def run_plots(
     models_pattern: str = "models/dqn/*.pt",
     results_pattern: str = "data/results/*.csv",
@@ -110,9 +149,13 @@ def run_plots(
             print(f"\nProcessing: {name}")
 
         # Learning curve
+        stats = {}
         if stats_path.exists():
             with open(stats_path) as f:
                 stats = json.load(f)
+
+            # Generate formatted title with variant and hyperparameters
+            title_base = format_title(name, stats)
 
             if "episode_best_gaps" in stats:
                 gaps = stats["episode_best_gaps"]
@@ -120,7 +163,7 @@ def run_plots(
                 plot_learning_curve(
                     gaps,
                     window=min(100, len(gaps) // 5) if len(gaps) > 10 else 1,
-                    title=f"Learning Curve: {name}",
+                    title=f"Learning Curve: {title_base}",
                     save_path=plot_path,
                 )
                 generated["learning_curves"].append(str(plot_path))
@@ -134,7 +177,7 @@ def run_plots(
                 plot_action_distribution(
                     action_counts,
                     action_labels=action_labels_list,
-                    title=f"Action Distribution: {name}",
+                    title=f"Action Distribution: {title_base}",
                     save_path=plot_path,
                 )
                 generated["action_dists"].append(str(plot_path))
@@ -148,12 +191,15 @@ def run_plots(
             gap_labels = ["0%", "1%", "2%", "5%", "10%", "20%", "50%"]
             act_labels = [action_labels.get(i, f"A{i}") for i in range(model.n_actions)]
 
+            # Use formatted title if stats available, otherwise use name
+            title_base = format_title(name, stats) if stats else name
+
             plot_path = output_dir / f"{name}_q_heatmap.png"
             plot_q_values_heatmap(
                 q_matrix,
                 gap_labels,
                 act_labels,
-                title=f"Q-values: {name}",
+                title=f"Q-values: {title_base}",
                 save_path=plot_path,
             )
             generated["heatmaps"].append(str(plot_path))
@@ -170,7 +216,7 @@ def run_plots(
                 q_matrix_late,
                 gap_labels,
                 act_labels,
-                title=f"Q-values by Time: {name}",
+                title=f"Q-values by Time: {title_base}",
                 save_path=plot_path_time,
                 t_early=0.8,
                 t_late=0.2,

@@ -139,6 +139,7 @@ def main():
         splits = json.load(f)
 
     # Step 2: Train models
+    # If compare_double is True, trains both DQN and Double DQN variants
     def step_train():
         for inst_type in config.types:
             run_training(
@@ -154,6 +155,7 @@ def main():
                 device=config.device,
                 workers=config.workers,
                 train_limit=config.train_limit,
+                compare_variants=config.compare_double,
             )
 
     timings["training"], _ = run_step("2. Training models", step_train)
@@ -173,7 +175,7 @@ def main():
 
     timings["evaluation"], _ = run_step("3. Evaluating models", step_evaluate)
 
-    # Step 4: Compare DQN vs Double DQN
+    # Step 4: Generate comparison plots (uses stats from step 2)
     def step_compare():
         if not config.compare_double:
             print("   Skipped (--no_compare_double)")
@@ -192,9 +194,10 @@ def main():
                 device=config.device,
                 workers=config.workers,
                 train_limit=config.train_limit,
+                models_dir="models/dqn",
             )
 
-    timings["comparison"], _ = run_step("4. DQN vs Double DQN comparison", step_compare)
+    timings["comparison"], _ = run_step("4. DQN vs Double DQN comparison plots", step_compare)
 
     # Step 5: Generate plots
     def step_plots():

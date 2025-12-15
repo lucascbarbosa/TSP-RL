@@ -693,7 +693,13 @@ def plot_gap_violins_by_size_method(
         title: Plot title.
         save_path: Path to save figure (displays if None).
     """
-    methods = sorted(gaps_by_method.keys())
+    # Define preferred order: DQN variants first, then baseline
+    method_order = ["DQN", "Double DQN", "GRASP+2opt"]
+    available_methods = set(gaps_by_method.keys())
+
+    # Order methods: preferred order first, then alphabetically for any others
+    methods = [m for m in method_order if m in available_methods]
+    methods += sorted(available_methods - set(method_order))
     all_sizes = set()
     for method_data in gaps_by_method.values():
         all_sizes.update(method_data.keys())
@@ -704,7 +710,8 @@ def plot_gap_violins_by_size_method(
 
     n_methods = len(methods)
     n_sizes = len(sizes)
-    width = 0.35
+    # Adjust width based on number of methods to avoid overlap
+    width = 0.8 / n_methods if n_methods > 1 else 0.35
     method_colors = [COLORS["primary"], COLORS["secondary"], COLORS["tertiary"], COLORS["quaternary"]]
 
     fig_width = max(8, n_sizes * 1.5 + 2)

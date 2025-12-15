@@ -38,13 +38,26 @@ def get_default_workers() -> int:
     return max(1, n_cpus - 2)
 
 
-def parse_model_name(model_path: str) -> tuple[str, int]:
-    """Extract instance type and size from model filename."""
+def parse_model_name(model_path: str) -> tuple[str, int, str | None]:
+    """
+    Extract instance type, size, and variant from model filename.
+
+    Returns:
+        (instance_type, size, variant) where variant is 'standard', 'double', or None.
+    """
     filename = Path(model_path).stem
-    match = re.match(r"(.+)_n(\d+)", filename)
-    if not match:
-        raise ValueError(f"Cannot parse model name: {filename}")
-    return match.group(1), int(match.group(2))
+
+    # Try to match with variant suffix first (e.g., EUC_2D_n010_standard)
+    match = re.match(r"(.+)_n(\d+)_(standard|double)$", filename)
+    if match:
+        return match.group(1), int(match.group(2)), match.group(3)
+
+    # Fallback: no variant suffix (e.g., EUC_2D_n010)
+    match = re.match(r"(.+)_n(\d+)$", filename)
+    if match:
+        return match.group(1), int(match.group(2)), None
+
+    raise ValueError(f"Cannot parse model name: {filename}")
 
 
 # GRASP alphas available to DQN-ILS agent (actions 10-15)
@@ -141,7 +154,7 @@ def _eval_worker(args: tuple) -> list[dict]:
     reference for DQN's state computation. Only reports baseline results
     if report_baseline=True.
     """
-    instance_id, dataset_path, model_path, time_budget, report_baseline = args
+    instance_id, dataset_path, model_path, time_budget, report_baseline, method_name = args
 
     # Load instance once
     dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
@@ -173,7 +186,7 @@ def _eval_worker(args: tuple) -> list[dict]:
     results.append(
         {
             "instance_id": instance_id,
-            "method": "DQN-ILS",
+            "method": method_name,
             "gap": dqn_gap,
             "time": dqn_elapsed,
             "iterations": dqn_iters,
@@ -210,7 +223,7 @@ def run_evaluation(
         Dictionary with evaluation results.
     """
     try:
-        instance_type, size = parse_model_name(model_path)
+        instance_type, size, variant = parse_model_name(model_path)
     except ValueError as e:
         if verbose:
             print(f"Skipping {model_path}: {e}")
@@ -237,14 +250,22 @@ def run_evaluation(
             print(f"No test instances for size {size}")
         return {}
 
+    # Determine method name for CSV output
+    if variant == "double":
+        method_name = "Double DQN"
+    elif variant == "standard":
+        method_name = "DQN"
+    else:
+        method_name = "Double DQN"  # Default assumes Double DQN (since use_double_dqn=True is default)
+
     if verbose:
-        print(f"Evaluating {instance_type} n={size} ({len(size_test_ids)} instances, {workers} workers)")
+        print(f"Evaluating {instance_type} n={size} ({method_name}, {len(size_test_ids)} instances, {workers} workers)")
 
     tb = compute_time_budget(size, time_budget)
     results = []
 
     # Always run baseline internally for accurate reference; only report if requested
-    worker_args = [(inst_id, dataset_path, model_path, tb, baseline) for inst_id in size_test_ids]
+    worker_args = [(inst_id, dataset_path, model_path, tb, baseline, method_name) for inst_id in size_test_ids]
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {executor.submit(_eval_worker, arg): arg[0] for arg in worker_args}
         for future in as_completed(futures):
@@ -264,8 +285,9 @@ def run_evaluation(
     # Save results
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    suffix = "_baseline" if baseline else ""
-    output_path = output_dir / f"eval_{instance_type}_n{size:03d}{suffix}.csv"
+    variant_suffix = f"_{variant}" if variant else ""
+    baseline_suffix = "_baseline" if baseline else ""
+    output_path = output_dir / f"eval_{instance_type}_n{size:03d}{variant_suffix}{baseline_suffix}.csv"
 
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=results[0].keys())
@@ -273,11 +295,11 @@ def run_evaluation(
         writer.writerows(results)
 
     # Summary
-    dqn_gaps = [float(r["Gap"].replace("%", "")) for r in results if r["Method"] == "DQN-ILS"]
+    dqn_gaps = [float(r["Gap"].replace("%", "")) for r in results if r["Method"] == method_name]
     summary = {"dqn_mean": np.mean(dqn_gaps), "dqn_std": np.std(dqn_gaps)}
 
     if verbose:
-        print(f"  DQN: {summary['dqn_mean']:.2f}% ± {summary['dqn_std']:.2f}%")
+        print(f"  {method_name}: {summary['dqn_mean']:.2f}% ± {summary['dqn_std']:.2f}%")
 
     if baseline:
         bl_gaps = [float(r["Gap"].replace("%", "")) for r in results if r["Method"] == "GRASP+2opt"]

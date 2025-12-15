@@ -35,6 +35,7 @@ def run_training(
     train_limit: int | None = None,
     output_dir: str = "models/dqn",
     verbose: bool = True,
+    compare_variants: bool = False,
 ) -> dict:
     """
     Train DQN models for a given instance type and sizes.
@@ -54,6 +55,7 @@ def run_training(
         train_limit: Limit training instances per size (None = no limit).
         output_dir: Output directory for models.
         verbose: Print progress.
+        compare_variants: If True, train both DQN and Double DQN for comparison.
 
     Returns:
         Dictionary with training results per size.
@@ -95,75 +97,121 @@ def run_training(
         train_dataset = TSPDataset(dataset_path, size_train_ids)
         train_instances = list(train_dataset)
 
-        # Configure training
-        config = DQNConfig(
-            time_budget=time_budget,
-            history_len=history_len,
-            n_episodes=episodes,
-            gamma=gamma,
-            lr=lr,
-            hidden_dim=hidden_dim,
-            device=device,
-            n_workers=workers,
-        )
-
-        # Train
-        model, stats = train_dqn(
-            train_instances,
-            config,
-            verbose=verbose,
-            dataset_path=dataset_path,
-            instance_ids=size_train_ids,
-        )
-
-        # Evaluate on test set (parallel if workers > 1)
-        test_avg_gap = None
-        test_std_gap = None
+        test_instances = []
         if size_test_ids:
             test_dataset = TSPDataset(dataset_path, size_test_ids)
             test_instances = list(test_dataset)
-            test_gaps = evaluate_dqn(
-                model,
-                test_instances,
-                config,
-                verbose=False,
-                dataset_path=dataset_path,
-                instance_ids=size_test_ids,
-            )
-            test_avg_gap = float(np.mean(test_gaps))
-            test_std_gap = float(np.std(test_gaps))
+
+        # Define variants to train
+        if compare_variants:
+            variants = [
+                ("standard", False),  # DQN
+                ("double", True),  # Double DQN
+            ]
+        else:
+            variants = [("double", True)]  # Default: Double DQN only
+
+        size_results = {}
+
+        for variant_suffix, use_double in variants:
+            variant_name = "Double DQN" if use_double else "DQN"
             if verbose:
-                print(f"Test gap: {test_avg_gap:.2f}% ± {test_std_gap:.2f}%")
+                print(f"\n  --- Training {variant_name} ---")
 
-        # Save model
-        model_path = output_dir / f"{inst_type}_n{size:03d}.pt"
-        save_model(model, model_path)
-        if verbose:
-            print(f"Model saved to: {model_path}")
+            # Configure training
+            config = DQNConfig(
+                time_budget=time_budget,
+                history_len=history_len,
+                n_episodes=episodes,
+                gamma=gamma,
+                lr=lr,
+                hidden_dim=hidden_dim,
+                device=device,
+                n_workers=workers,
+                use_double_dqn=use_double,
+            )
 
-        # Save stats
-        stats_path = output_dir / f"{inst_type}_n{size:03d}_stats.json"
-        stats_dict = {
-            "type": inst_type,
-            "size": size,
-            "n_actions": N_ACTIONS,
-            "n_episodes": episodes,
-            "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
-            "test_avg_gap": test_avg_gap,
-            "test_std_gap": test_std_gap,
-            "episode_best_gaps": stats.episode_best_gaps,
-            "episode_rewards": stats.episode_rewards,
-            "losses": stats.losses,
-            "action_counts": {str(k): v for k, v in stats.action_counts.items()},
-        }
-        with open(stats_path, "w") as f:
-            json.dump(stats_dict, f, indent=2)
+            # Train
+            model, stats = train_dqn(
+                train_instances,
+                config,
+                verbose=verbose,
+                dataset_path=dataset_path,
+                instance_ids=size_train_ids,
+            )
 
-        results[size] = {
-            "model_path": str(model_path),
-            "final_avg_gap": stats_dict["final_avg_gap"],
-            "test_avg_gap": test_avg_gap,
-        }
+            # Evaluate on test set (parallel if workers > 1)
+            test_avg_gap = None
+            test_std_gap = None
+            test_gaps = []
+            if test_instances:
+                test_gaps = evaluate_dqn(
+                    model,
+                    test_instances,
+                    config,
+                    verbose=False,
+                    dataset_path=dataset_path,
+                    instance_ids=size_test_ids,
+                )
+                test_avg_gap = float(np.mean(test_gaps))
+                test_std_gap = float(np.std(test_gaps))
+                if verbose:
+                    print(f"  Test gap: {test_avg_gap:.2f}% ± {test_std_gap:.2f}%")
+
+            # Determine filename suffix
+            if compare_variants:
+                model_path = output_dir / f"{inst_type}_n{size:03d}_{variant_suffix}.pt"
+                stats_path = output_dir / f"{inst_type}_n{size:03d}_{variant_suffix}_stats.json"
+            else:
+                model_path = output_dir / f"{inst_type}_n{size:03d}.pt"
+                stats_path = output_dir / f"{inst_type}_n{size:03d}_stats.json"
+
+            # Save model
+            save_model(model, model_path)
+            if verbose:
+                print(f"  Model saved to: {model_path}")
+
+            # Save stats (include Q-value stats and hyperparams for plotting)
+            stats_dict = {
+                "type": inst_type,
+                "size": size,
+                "n_actions": N_ACTIONS,
+                "n_episodes": episodes,
+                "use_double_dqn": use_double,
+                "gamma": gamma,
+                "lr": lr,
+                "hidden_dim": hidden_dim,
+                "time_budget": time_budget,
+                "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
+                "test_avg_gap": test_avg_gap,
+                "test_std_gap": test_std_gap,
+                "test_gaps": test_gaps,
+                "episode_best_gaps": stats.episode_best_gaps,
+                "episode_rewards": stats.episode_rewards,
+                "episode_lengths": stats.episode_lengths,
+                "losses": stats.losses,
+                "epsilons": stats.epsilons,
+                "action_counts": {str(k): v for k, v in stats.action_counts.items()},
+                "q_values_mean": stats.q_values_mean,
+                "q_values_max": stats.q_values_max,
+            }
+            with open(stats_path, "w") as f:
+                json.dump(stats_dict, f, indent=2)
+
+            size_results[variant_suffix] = {
+                "model_path": str(model_path),
+                "stats_path": str(stats_path),
+                "final_avg_gap": stats_dict["final_avg_gap"],
+                "test_avg_gap": test_avg_gap,
+                "use_double_dqn": use_double,
+            }
+
+        # Store results
+        if compare_variants:
+            results[size] = size_results
+        else:
+            # Single variant: flatten structure for backward compatibility
+            results[size] = size_results["double"]
 
     return results
 

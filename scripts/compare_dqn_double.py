@@ -2,7 +2,8 @@
 """
 Compare DQN vs Double DQN on TSP instances.
 
-Trains both variants, evaluates on test set, and generates comparative plots.
+When called from pipeline (after training step), loads existing stats and generates plots.
+When called standalone, trains both variants from scratch if stats don't exist.
 
 Usage:
     python scripts/compare_dqn_double.py --type EUC_2D --sizes 30 50 --episodes 1000
@@ -15,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import argparse
 import json
-from dataclasses import asdict
 
 import numpy as np
 
@@ -56,6 +56,11 @@ def get_action_labels() -> list[str]:
     return labels
 
 
+def format_hyperparams(episodes: int, lr: float, gamma: float) -> str:
+    """Format hyperparameters for plot subtitle."""
+    return f"ep={episodes}, lr={lr}, γ={gamma}"
+
+
 def run_comparison(
     inst_type: str,
     sizes: list[int],
@@ -69,17 +74,17 @@ def run_comparison(
     device: str = "cpu",
     workers: int = 1,
     train_limit: int | None = None,
-    output_dir: str = "data/results/comparison",
+    models_dir: str = "models/dqn",
     verbose: bool = True,
 ) -> dict:
     """
     Run DQN vs Double DQN comparison.
 
-    Trains both variants for each size, evaluates, and generates plots.
+    If stats already exist (from training step), loads them and generates plots.
+    If stats don't exist, trains both variants from scratch (standalone mode).
     """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    # Plots go to data/plots/ (alongside other pipeline plots)
+    models_dir = Path(models_dir)
+    models_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = Path("data/plots")
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,100 +118,143 @@ def run_comparison(
             print(f"\n{'=' * 60}")
             print(f"Comparing DQN variants: {inst_type} n={size}")
             print(f"{'=' * 60}")
-            print(f"  Train instances: {len(size_train_ids)}")
-            print(f"  Test instances: {len(size_test_ids)}")
 
-        # Load instances
-        train_dataset = TSPDataset(dataset_path, size_train_ids)
-        train_instances = list(train_dataset)
-
-        test_instances = []
-        if size_test_ids:
-            test_dataset = TSPDataset(dataset_path, size_test_ids)
-            test_instances = list(test_dataset)
+        # Check if stats already exist (from training step)
+        standard_stats_path = models_dir / f"{inst_type}_n{size:03d}_standard_stats.json"
+        double_stats_path = models_dir / f"{inst_type}_n{size:03d}_double_stats.json"
 
         variants = [
-            ("DQN", False),
-            ("Double DQN", True),
+            ("DQN", "standard", False),
+            ("Double DQN", "double", True),
         ]
 
         all_stats = []
         all_labels = []
         size_results = {}
+        stats_loaded = False
 
-        for variant_name, use_double in variants:
+        # Try to load existing stats
+        if standard_stats_path.exists() and double_stats_path.exists():
             if verbose:
-                print(f"\n--- Training {variant_name} ---")
+                print("  Loading existing stats from training step...")
+            stats_loaded = True
 
-            config = DQNConfig(
-                time_budget=time_budget,
-                history_len=history_len,
-                n_episodes=episodes,
-                gamma=gamma,
-                lr=lr,
-                hidden_dim=hidden_dim,
-                device=device,
-                n_workers=workers,
-                use_double_dqn=use_double,
-            )
+            for variant_name, variant_suffix, use_double in variants:
+                stats_path = models_dir / f"{inst_type}_n{size:03d}_{variant_suffix}_stats.json"
+                with open(stats_path) as f:
+                    stats_dict = json.load(f)
 
-            model, stats = train_dqn(
-                train_instances,
-                config,
-                verbose=verbose,
-                dataset_path=dataset_path,
-                instance_ids=size_train_ids,
-            )
+                all_stats.append(stats_dict)
+                all_labels.append(variant_name)
 
-            # Evaluate
-            test_gaps = []
-            if test_instances:
-                test_gaps = evaluate_dqn(
-                    model,
-                    test_instances,
-                    config,
-                    verbose=False,
-                    dataset_path=dataset_path,
-                    instance_ids=size_test_ids,
+                # Extract hyperparams from loaded stats (for plot titles)
+                episodes = stats_dict.get("n_episodes", episodes)
+                lr = stats_dict.get("lr", lr)
+                gamma = stats_dict.get("gamma", gamma)
+
+                size_results[variant_name] = {
+                    "model_path": str(models_dir / f"{inst_type}_n{size:03d}_{variant_suffix}.pt"),
+                    "final_avg_gap": stats_dict.get("final_avg_gap", 0),
+                    "test_avg_gap": stats_dict.get("test_avg_gap"),
+                    "test_std_gap": stats_dict.get("test_std_gap"),
+                }
+
+        # If stats don't exist, train from scratch (standalone mode)
+        if not stats_loaded:
+            if verbose:
+                print(f"  Train instances: {len(size_train_ids)}")
+                print(f"  Test instances: {len(size_test_ids)}")
+                print("  Training variants from scratch...")
+
+            # Load instances
+            train_dataset = TSPDataset(dataset_path, size_train_ids)
+            train_instances = list(train_dataset)
+
+            test_instances = []
+            if size_test_ids:
+                test_dataset = TSPDataset(dataset_path, size_test_ids)
+                test_instances = list(test_dataset)
+
+            for variant_name, variant_suffix, use_double in variants:
+                if verbose:
+                    print(f"\n--- Training {variant_name} ---")
+
+                config = DQNConfig(
+                    time_budget=time_budget,
+                    history_len=history_len,
+                    n_episodes=episodes,
+                    gamma=gamma,
+                    lr=lr,
+                    hidden_dim=hidden_dim,
+                    device=device,
+                    n_workers=workers,
+                    use_double_dqn=use_double,
                 )
 
-            stats_dict = stats_to_dict(stats)
-            stats_dict["test_gaps"] = test_gaps
-            stats_dict["test_avg_gap"] = float(np.mean(test_gaps)) if test_gaps else None
-            stats_dict["test_std_gap"] = float(np.std(test_gaps)) if test_gaps else None
+                model, stats = train_dqn(
+                    train_instances,
+                    config,
+                    verbose=verbose,
+                    dataset_path=dataset_path,
+                    instance_ids=size_train_ids,
+                )
 
-            all_stats.append(stats_dict)
-            all_labels.append(variant_name)
+                # Evaluate
+                test_gaps = []
+                if test_instances:
+                    test_gaps = evaluate_dqn(
+                        model,
+                        test_instances,
+                        config,
+                        verbose=False,
+                        dataset_path=dataset_path,
+                        instance_ids=size_test_ids,
+                    )
 
-            # Save model
-            variant_suffix = "double" if use_double else "standard"
-            model_path = output_dir / f"{inst_type}_n{size:03d}_{variant_suffix}.pt"
-            save_model(model, model_path)
+                stats_dict = stats_to_dict(stats)
+                stats_dict["test_gaps"] = test_gaps
+                stats_dict["test_avg_gap"] = float(np.mean(test_gaps)) if test_gaps else None
+                stats_dict["test_std_gap"] = float(np.std(test_gaps)) if test_gaps else None
+                # Add hyperparams for plot titles
+                stats_dict["n_episodes"] = episodes
+                stats_dict["lr"] = lr
+                stats_dict["gamma"] = gamma
+                stats_dict["time_budget"] = time_budget
+                stats_dict["hidden_dim"] = hidden_dim
 
-            # Save stats
-            stats_path = output_dir / f"{inst_type}_n{size:03d}_{variant_suffix}_stats.json"
-            with open(stats_path, "w") as f:
-                json.dump(stats_dict, f, indent=2)
+                all_stats.append(stats_dict)
+                all_labels.append(variant_name)
 
-            size_results[variant_name] = {
-                "model_path": str(model_path),
-                "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
-                "test_avg_gap": stats_dict["test_avg_gap"],
-                "test_std_gap": stats_dict["test_std_gap"],
-            }
+                # Save model
+                model_path = models_dir / f"{inst_type}_n{size:03d}_{variant_suffix}.pt"
+                save_model(model, model_path)
 
-            if verbose and stats_dict["test_avg_gap"] is not None:
-                print(f"  Test gap: {stats_dict['test_avg_gap']:.2f}% +/- {stats_dict['test_std_gap']:.2f}%")
+                # Save stats
+                stats_path = models_dir / f"{inst_type}_n{size:03d}_{variant_suffix}_stats.json"
+                with open(stats_path, "w") as f:
+                    json.dump(stats_dict, f, indent=2)
 
-        # Generate comparison plots
+                size_results[variant_name] = {
+                    "model_path": str(model_path),
+                    "final_avg_gap": float(np.mean(stats.episode_best_gaps[-100:])),
+                    "test_avg_gap": stats_dict["test_avg_gap"],
+                    "test_std_gap": stats_dict["test_std_gap"],
+                }
+
+                if verbose and stats_dict["test_avg_gap"] is not None:
+                    print(f"  Test gap: {stats_dict['test_avg_gap']:.2f}% ± {stats_dict['test_std_gap']:.2f}%")
+
+        # Generate comparison plots with hyperparameters in title
         if verbose:
             print(f"\nGenerating comparison plots...")
+
+        hp_str = format_hyperparams(episodes, lr, gamma)
 
         # 1. Learning curves comparison
         plot_learning_curves_comparison(
             all_stats,
             all_labels,
-            title=f"Learning Curves: {inst_type} n={size}",
+            title=f"Learning Curves: {inst_type} n={size}\n({hp_str})",
             save_path=plots_dir / f"{inst_type}_n{size:03d}_learning_curve_comparison.png",
         )
 
@@ -214,7 +262,7 @@ def run_comparison(
         plot_q_values_comparison(
             all_stats,
             all_labels,
-            title=f"Q-values Evolution: {inst_type} n={size}",
+            title=f"Q-values Evolution: {inst_type} n={size}\n({hp_str})",
             save_path=plots_dir / f"{inst_type}_n{size:03d}_q_values_comparison.png",
         )
 
@@ -223,7 +271,7 @@ def run_comparison(
             all_stats,
             all_labels,
             action_labels=action_labels,
-            title=f"Action Distribution (last 10% episodes): {inst_type} n={size}",
+            title=f"Action Distribution (last 10% episodes): {inst_type} n={size}\n({hp_str})",
             save_path=plots_dir / f"{inst_type}_n{size:03d}_action_dist_comparison.png",
         )
 
@@ -236,14 +284,8 @@ def run_comparison(
                 test_str = f"{res['test_avg_gap']:.2f}%" if res["test_avg_gap"] else "N/A"
                 print(f"  {variant_name}: train={res['final_avg_gap']:.2f}%, test={test_str}")
 
-    # Save overall results
-    results_path = output_dir / f"{inst_type}_comparison_results.json"
-    with open(results_path, "w") as f:
-        json.dump(results, f, indent=2)
-
     if verbose:
-        print(f"\nResults saved to: {output_dir}")
-        print(f"Plots saved to: {plots_dir}/")
+        print(f"\nPlots saved to: {plots_dir}/")
 
     return results
 
@@ -264,7 +306,7 @@ def main() -> None:
     parser.add_argument(
         "--workers", type=int, default=1, help=f"Parallel workers (max recommended: {get_default_workers()})"
     )
-    parser.add_argument("--output_dir", type=str, default="data/results/comparison")
+    parser.add_argument("--models_dir", type=str, default="models/dqn")
     args = parser.parse_args()
 
     # Load splits
@@ -285,7 +327,7 @@ def main() -> None:
         device=args.device,
         workers=args.workers,
         train_limit=args.limit,
-        output_dir=args.output_dir,
+        models_dir=args.models_dir,
     )
 
     print("\nComparison complete!")
