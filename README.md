@@ -34,36 +34,29 @@ O estado é um vetor contínuo que captura:
 
 **Normalização do gap:** `g_norm = log(1 + gap) / log(101)` — comprime gaps grandes, preserva resolução em gaps pequenos.
 
-### Recompensa
+### Recompensa (`--reward_type`)
 
-A recompensa é a **melhoria no melhor gap** encontrado:
+Duas opções de recompensa disponíveis via `--reward_type`:
 
-```
-reward = g_best_old - g_best_new
-```
+| Tipo | Fórmula | Descrição |
+|------|---------|-----------|
+| `delta` (padrão) | `g_best_old - g_best_new` | Recompensa por melhoria no melhor gap |
+| `sparse` | `-normalize_gap(best_gap)` no final | Recompensa apenas no fim do episódio |
 
-- Recompensa > 0 apenas quando o agente melhora o recorde
-- Alinha o sinal de recompensa com o objetivo real (minimizar gap)
-- Sparse mas informativo
+- **delta**: Recompensa > 0 apenas quando o agente melhora o recorde. Alinha o sinal com o objetivo (minimizar gap).
+- **sparse**: Zero durante episódio, recompensa final baseada no gap (menor gap → maior reward).
 
-### Referência para o Gap: Treino vs Avaliação
+### Referência para o Gap
 
-O gap é calculado como `(custo_atual - referência) / referência × 100%`. A escolha da **referência** difere entre treino e avaliação para evitar vazamento de informação privilegiada:
+O gap é calculado como `(custo_atual - referência) / referência × 100%`.
 
-| Contexto | Referência p/ Estado | Gap Reportado | Justificativa |
-|----------|---------------------|---------------|---------------|
-| **Treino** | `opt_cost` | `opt_cost` | Sinal de supervisão limpo |
-| **Avaliação** | `baseline_cost` | `opt_cost`* | Simula deploy real |
+**Referência para o estado**: Tanto em treino quanto em avaliação, usamos `baseline_cost` (GRASP+2opt) como referência. Isso garante:
+- Distribuição consistente entre treino e avaliação
+- Método funciona sem conhecer o custo ótimo (cenário real de deploy)
 
-\* Se `opt_cost` não disponível, reporta vs `baseline_cost`.
+**Gap reportado**: Quando disponível, o gap é reportado vs `opt_cost` para comparação com a literatura.
 
-**Motivação:** Em um cenário real de deploy, não conhecemos o custo ótimo da instância. Para demonstrar que o método funciona sem essa informação privilegiada:
-
-1. **Treino**: O modelo aprende usando `opt_cost` como referência — isso é aceitável pois os dados de treino têm soluções ótimas conhecidas (resolvidas por MIP ou heurísticas exatas).
-
-2. **Avaliação**: O modelo recebe estados baseados em `baseline_cost`, simulando deploy onde o ótimo é desconhecido. O gap *reportado* ainda usa `opt_cost` para métrica comparável com a literatura.
-
-**Cálculo do baseline:** Na avaliação, o baseline competidor (GRASP+2opt) roda com o mesmo time budget do DQN, selecionando α aleatoriamente de {0.03, 0.1, 0.3} a cada iteração — os mesmos valores disponíveis ao agente DQN. O `baseline_cost` da instância é atualizado se uma solução melhor for encontrada, garantindo referência de alta qualidade para o estado do DQN.
+**Cálculo do baseline:** O baseline competidor (GRASP+2opt) roda com o mesmo time budget do DQN, selecionando α aleatoriamente de {0.03, 0.1, 0.3} a cada iteração — os mesmos valores disponíveis ao agente DQN.
 
 ### Ações (16)
 
@@ -116,14 +109,14 @@ TSP-RL/
 │   ├── train_dqn.py              # Treinamento DQN (paralelo)
 │   ├── evaluate_dqn.py           # Avaliação de modelos (paralela)
 │   ├── compare_dqn_double.py     # Comparação DQN vs Double DQN
-│   ├── generate_splits.py        # Gera splits train/test
+│   ├── generate_splits.py        # Gera splits train/val/test
 │   ├── generate_plots.py         # Gera gráficos de resultados
 │   └── clear.sh                  # Remove arquivos gerados
 ├── models/
 │   └── dqn/                      # Modelos treinados (.pt)
 ├── data/
 │   ├── {EUC_2D,ATT,GEO}.json     # Instâncias (11110 por tipo)
-│   └── splits.json               # Split 90/10 (seed=42)
+│   └── splits.json               # Split 80/10/10 (seed=42)
 └── tests/
 ```
 
@@ -241,16 +234,17 @@ print(f"Best gap: {env.best_gap:.2f}%")
 
 ## Hiperparâmetros
 
-### DQN (`train_dqn.py`)
+### Pipeline (`pipeline.py`)
 
 | Parâmetro | Flag | Default | Descrição |
 |-----------|------|---------|-----------|
-| Time budget | `--time_budget` | 10.0 | Budget base em segundos (escala com n²) |
-| Episódios | `--episodes` | 128 | Número de episódios de treino |
+| Time budget | `--time_budget` | 5.0 | Budget base em segundos (escala com n²) |
+| Episódios | `--episodes` | 200 | Número de episódios de treino |
 | γ (gamma) | `--gamma` | 0.99 | Discount factor |
 | Learning rate | `--lr` | 0.001 | Taxa de aprendizado |
 | Hidden dim | `--hidden_dim` | 64 | Neurônios por camada oculta |
-| Workers | `--workers` | 1 | Workers paralelos (batch episodes) |
+| Reward type | `--reward_type` | delta | Tipo de recompensa (`delta` ou `sparse`) |
+| Workers | `--workers` | 16 | Workers paralelos |
 
 ### Configuração completa (`DQNConfig`)
 
@@ -260,6 +254,7 @@ class DQNConfig:
     # Ambiente
     time_budget: float = 10.0   # T(n) = (n/100)² * time_budget
     history_len: int = 1        # Ações no histórico
+    reward_type: str = "delta"  # "delta" (melhoria) ou "sparse" (só no final)
 
     # DQN
     gamma: float = 0.99
@@ -271,12 +266,11 @@ class DQNConfig:
     # Exploração
     epsilon_start: float = 1.0
     epsilon_end: float = 0.05
-    epsilon_decay: float = 0.995
 
     # Treinamento
-    n_episodes: int = 128
+    n_episodes: int = 2000
     updates_per_episode: int = 5
-    n_workers: int = 1          # Workers paralelos (batch episodes)
+    n_workers: int = 1          # Workers paralelos
 
     # Double DQN
     use_double_dqn: bool = True # Reduz superestimação de Q-values
@@ -340,7 +334,7 @@ Todas as variantes usam kernels Numba JIT (~20-100x mais rápido que Python puro
 - **3 tipos**: EUC_2D, ATT, GEO
 - **10 tamanhos**: 10, 20, ..., 100 nós
 - **11.110 instâncias por tipo** (1.111 por tamanho)
-- **Split**: 90% treino, 10% teste (seed=42)
+- **Split**: 80% treino, 10% val, 10% teste (seed=42)
 
 ## Outputs do Pipeline
 
