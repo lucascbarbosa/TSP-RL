@@ -64,23 +64,31 @@ def parse_model_name(model_path: str) -> tuple[str, int, str | None]:
 BASELINE_GRASP_ALPHAS = [0.03, 0.1, 0.3]
 
 
-def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float, int, float]:
-    """
-    Baseline: GRASP + 2-opt full with time budget.
+# =============================================================================
+# Worker functions for parallel execution
+# =============================================================================
 
-    Randomly selects alpha from the same pool available to DQN-ILS agent
-    for fair comparison (alpha ∈ {0.03, 0.1, 0.3}).
+
+def _baseline_worker(args: tuple) -> dict:
+    """
+    Compute baseline (GRASP+2opt) for a single instance.
+
+    Args:
+        args: (instance_id, dataset_path, time_budget)
 
     Returns:
-        (gap, elapsed_time, iterations, best_cost)
+        Dict with instance_id, gap, time, iterations, cost.
     """
-    t0 = time.perf_counter()
-    opt_cost = instance.opt_cost
+    instance_id, dataset_path, time_budget = args
 
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
+    instance = next(iter(dataset))
+
+    t0 = time.perf_counter()
     best_cost = float("inf")
     iterations = 0
+
     while time.perf_counter() - t0 < time_budget:
-        # Randomly select alpha each iteration (same pool as DQN-ILS)
         alpha = random.choice(BASELINE_GRASP_ALPHAS)
         tour, _ = grasp(instance, alpha=alpha)
         sol = Solution(tour, instance.dist_matrix, is_closed=True)
@@ -90,37 +98,41 @@ def evaluate_baseline_grasp(instance, time_budget: float) -> tuple[float, float,
         iterations += 1
 
     elapsed = time.perf_counter() - t0
+    gap = ((best_cost - instance.opt_cost) / instance.opt_cost) * 100
 
-    # Compute gap vs optimal (required for evaluation instances)
-    if opt_cost is None:
-        raise ValueError(f"Instance {instance.name} has no opt_cost. Evaluation requires known optimal.")
-    gap = ((best_cost - opt_cost) / opt_cost) * 100
+    return {
+        "instance_id": instance_id,
+        "gap": gap,
+        "time": elapsed,
+        "iterations": iterations,
+        "cost": best_cost,
+    }
 
-    return gap, elapsed, iterations, best_cost
 
-
-def evaluate_dqn_instance(
-    model, instance, config: DQNConfig, use_baseline: bool = False
-) -> tuple[float, float, int, float]:
+def _dqn_worker(args: tuple) -> dict:
     """
-    Evaluate DQN on a single instance.
+    Evaluate DQN on a single instance using pre-computed baseline.
 
     Args:
-        model: Trained DQN model.
-        instance: TSP instance.
-        config: DQN configuration.
-        use_baseline: If True, use baseline_cost as reference for state computation.
-                     Gap is still reported relative to opt_cost for comparison.
+        args: (instance_id, dataset_path, model_path, time_budget, baseline_cost)
 
     Returns:
-        (gap_vs_opt, elapsed_time, iterations, best_cost)
+        Dict with instance_id, gap, time, iterations.
     """
     import torch
 
-    time_budget = compute_time_budget(instance.dimension, config.time_budget)
+    instance_id, dataset_path, model_path, time_budget, baseline_cost = args
+
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
+    instance = next(iter(dataset))
+    instance.set_baseline_cost(baseline_cost)
+
+    model = load_model(model_path)
+    history_len = (model.state_dim - 3) // N_ACTIONS
+    config = DQNConfig(time_budget=time_budget, history_len=history_len)
 
     t0 = time.perf_counter()
-    env = DQNEnv(instance, time_budget, config.history_len, use_baseline=use_baseline)
+    env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
     state = env.reset()
     done = False
     iterations = 0
@@ -134,66 +146,172 @@ def evaluate_dqn_instance(
         iterations += 1
 
     elapsed = time.perf_counter() - t0
-
-    # Report gap vs optimal (required for evaluation instances)
     best_cost = env.solution.cost
-    opt_cost = instance.opt_cost
-    if opt_cost is None:
-        raise ValueError(f"Instance {instance.name} has no opt_cost. Evaluation requires known optimal.")
-    gap = ((best_cost - opt_cost) / opt_cost) * 100
+    gap = ((best_cost - instance.opt_cost) / instance.opt_cost) * 100
 
-    return gap, elapsed, iterations, best_cost
+    return {
+        "instance_id": instance_id,
+        "gap": gap,
+        "time": elapsed,
+        "iterations": iterations,
+    }
 
 
-# Worker function for parallel evaluation
-def _eval_worker(args: tuple) -> list[dict]:
+# =============================================================================
+# Main evaluation functions
+# =============================================================================
+
+
+def run_grouped_evaluation(
+    inst_type: str,
+    size: int,
+    models: dict[str, str],
+    splits: dict,
+    time_budget: float = 10.0,
+    workers: int = 1,
+    eval_limit: int | None = None,
+    report_baseline: bool = False,
+    output_dir: str = "data/results",
+    verbose: bool = True,
+) -> dict:
     """
-    Evaluation worker: runs baseline then DQN on a single instance.
+    Evaluate multiple models on the same instances (baseline computed once).
 
-    Always runs baseline first (with full time budget) to establish accurate
-    reference for DQN's state computation. Only reports baseline results
-    if report_baseline=True.
+    This is the main evaluation function for the pipeline. It computes baselines
+    once per instance, then evaluates all models using cached baselines.
+
+    Args:
+        inst_type: Instance type (EUC_2D, ATT, GEO).
+        size: Instance size.
+        models: Dict mapping variant name to model path, e.g.:
+                {"DQN": "models/dqn/EUC_2D_n010_standard.pt",
+                 "Double DQN": "models/dqn/EUC_2D_n010_double.pt"}
+        splits: Dictionary with train/test splits.
+        time_budget: Base time budget in seconds.
+        workers: Number of parallel workers.
+        eval_limit: Limit test instances (None = no limit).
+        report_baseline: Include baseline results in output CSV.
+        output_dir: Output directory for results.
+        verbose: Print progress.
+
+    Returns:
+        Dictionary with evaluation summaries per method.
     """
-    instance_id, dataset_path, model_path, time_budget, report_baseline, method_name = args
+    dataset_path = f"data/{inst_type}.json"
+    if dataset_path not in splits:
+        if verbose:
+            print(f"No splits for {dataset_path}")
+        return {}
 
-    # Load instance once
-    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
-    instance = next(iter(dataset))
+    test_ids = splits[dataset_path]["test"]
 
-    results = []
+    # Filter by size
+    size_start = (size // 10 - 1) * 1111
+    size_end = (size // 10) * 1111
+    size_test_ids = [i for i in test_ids if size_start <= i < size_end]
 
-    # Always run baseline first to establish reference (full time budget)
-    bl_gap, bl_elapsed, bl_iters, bl_best_cost = evaluate_baseline_grasp(instance, time_budget)
-    instance.set_baseline_cost(bl_best_cost)
+    if eval_limit:
+        size_test_ids = size_test_ids[:eval_limit]
 
-    # Only report baseline if requested
+    if not size_test_ids:
+        if verbose:
+            print(f"No test instances for {inst_type} n={size}")
+        return {}
+
+    tb = compute_time_budget(size, time_budget)
+
+    if verbose:
+        print(f"Evaluating {inst_type} n={size} ({len(size_test_ids)} instances, {workers} workers)")
+        print(f"  Models: {list(models.keys())}")
+
+    # Step 1: Compute baselines (once for all models)
+    if verbose:
+        print("  Computing baselines...")
+
+    baseline_args = [(inst_id, dataset_path, tb) for inst_id in size_test_ids]
+    baselines = {}  # instance_id -> baseline result dict
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(_baseline_worker, arg): arg[0] for arg in baseline_args}
+        for future in as_completed(futures):
+            result = future.result()
+            baselines[result["instance_id"]] = result
+
+    if verbose:
+        bl_gaps = [baselines[i]["gap"] for i in size_test_ids]
+        print(f"  Baseline: {np.mean(bl_gaps):.2f}% ± {np.std(bl_gaps):.2f}%")
+
+    # Step 2: Evaluate each model using cached baselines
+    all_results = []
+    summaries = {}
+
+    # Add baseline results if requested
     if report_baseline:
-        results.append(
-            {
-                "instance_id": instance_id,
-                "method": "GRASP+2opt",
-                "gap": bl_gap,
-                "time": bl_elapsed,
-                "iterations": bl_iters,
-            }
-        )
+        for inst_id in size_test_ids:
+            bl = baselines[inst_id]
+            all_results.append(
+                {
+                    "Type": inst_type,
+                    "Dimension": size,
+                    "Instance": inst_id,
+                    "Method": "GRASP+2opt",
+                    "Gap": f"{bl['gap']:.4f}%",
+                    "Time (s)": f"{bl['time']:.3f}",
+                    "Iterations": bl["iterations"],
+                }
+            )
+        bl_gaps = [baselines[i]["gap"] for i in size_test_ids]
+        summaries["GRASP+2opt"] = {"mean": np.mean(bl_gaps), "std": np.std(bl_gaps)}
 
-    # Run DQN using baseline as reference
-    model = load_model(model_path)
-    history_len = (model.state_dim - 3) // N_ACTIONS
-    config = DQNConfig(time_budget=time_budget, history_len=history_len)
-    dqn_gap, dqn_elapsed, dqn_iters, _ = evaluate_dqn_instance(model, instance, config, use_baseline=True)
-    results.append(
-        {
-            "instance_id": instance_id,
-            "method": method_name,
-            "gap": dqn_gap,
-            "time": dqn_elapsed,
-            "iterations": dqn_iters,
-        }
-    )
+    # Evaluate each model
+    for method_name, model_path in models.items():
+        if verbose:
+            print(f"  Evaluating {method_name}...")
 
-    return results
+        dqn_args = [(inst_id, dataset_path, model_path, tb, baselines[inst_id]["cost"]) for inst_id in size_test_ids]
+
+        dqn_results = {}
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_dqn_worker, arg): arg[0] for arg in dqn_args}
+            for future in as_completed(futures):
+                result = future.result()
+                dqn_results[result["instance_id"]] = result
+
+        gaps = []
+        for inst_id in size_test_ids:
+            res = dqn_results[inst_id]
+            gaps.append(res["gap"])
+            all_results.append(
+                {
+                    "Type": inst_type,
+                    "Dimension": size,
+                    "Instance": inst_id,
+                    "Method": method_name,
+                    "Gap": f"{res['gap']:.4f}%",
+                    "Time (s)": f"{res['time']:.3f}",
+                    "Iterations": res["iterations"],
+                }
+            )
+
+        summaries[method_name] = {"mean": np.mean(gaps), "std": np.std(gaps)}
+        if verbose:
+            print(f"  {method_name}: {np.mean(gaps):.2f}% ± {np.std(gaps):.2f}%")
+
+    # Save results
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    baseline_suffix = "_baseline" if report_baseline else ""
+    output_path = output_dir / f"eval_{inst_type}_n{size:03d}{baseline_suffix}.csv"
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=all_results[0].keys())
+        writer.writeheader()
+        writer.writerows(all_results)
+
+    if verbose:
+        print(f"  Results saved to: {output_path}")
+
+    return summaries
 
 
 def run_evaluation(
@@ -207,10 +325,12 @@ def run_evaluation(
     verbose: bool = True,
 ) -> dict:
     """
-    Evaluate a trained DQN model.
+    Evaluate a single trained DQN model (standalone mode).
+
+    For pipeline use, prefer run_grouped_evaluation which computes baselines once.
 
     Args:
-        model_path: Path to model file (architecture inferred from checkpoint).
+        model_path: Path to model file.
         splits: Dictionary with train/test splits.
         time_budget: Base time budget in seconds.
         workers: Number of parallel workers.
@@ -229,89 +349,27 @@ def run_evaluation(
             print(f"Skipping {model_path}: {e}")
         return {}
 
-    dataset_path = f"data/{instance_type}.json"
-    if dataset_path not in splits:
-        if verbose:
-            print(f"No splits for {dataset_path}")
-        return {}
-
-    test_ids = splits[dataset_path]["test"]
-
-    # Filter by size
-    size_start = (size // 10 - 1) * 1111
-    size_end = (size // 10) * 1111
-    size_test_ids = [i for i in test_ids if size_start <= i < size_end]
-
-    if eval_limit:
-        size_test_ids = size_test_ids[:eval_limit]
-
-    if not size_test_ids:
-        if verbose:
-            print(f"No test instances for size {size}")
-        return {}
-
-    # Determine method name for CSV output
+    # Determine method name
     if variant == "double":
         method_name = "Double DQN"
     elif variant == "standard":
         method_name = "DQN"
     else:
-        method_name = "Double DQN"  # Default assumes Double DQN (since use_double_dqn=True is default)
+        method_name = "Double DQN"  # Default
 
-    if verbose:
-        print(f"Evaluating {instance_type} n={size} ({method_name}, {len(size_test_ids)} instances, {workers} workers)")
-
-    tb = compute_time_budget(size, time_budget)
-    results = []
-
-    # Always run baseline internally for accurate reference; only report if requested
-    worker_args = [(inst_id, dataset_path, model_path, tb, baseline, method_name) for inst_id in size_test_ids]
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(_eval_worker, arg): arg[0] for arg in worker_args}
-        for future in as_completed(futures):
-            for result in future.result():
-                results.append(
-                    {
-                        "Type": instance_type,
-                        "Dimension": size,
-                        "Instance": result["instance_id"],
-                        "Method": result["method"],
-                        "Gap": f"{result['gap']:.4f}%",
-                        "Time (s)": f"{result['time']:.3f}",
-                        "Iterations": result["iterations"],
-                    }
-                )
-
-    # Save results
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    variant_suffix = f"_{variant}" if variant else ""
-    baseline_suffix = "_baseline" if baseline else ""
-    output_path = output_dir / f"eval_{instance_type}_n{size:03d}{variant_suffix}{baseline_suffix}.csv"
-
-    with open(output_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=results[0].keys())
-        writer.writeheader()
-        writer.writerows(results)
-
-    # Summary
-    dqn_gaps = [float(r["Gap"].replace("%", "")) for r in results if r["Method"] == method_name]
-    summary = {"dqn_mean": np.mean(dqn_gaps), "dqn_std": np.std(dqn_gaps)}
-
-    if verbose:
-        print(f"  {method_name}: {summary['dqn_mean']:.2f}% ± {summary['dqn_std']:.2f}%")
-
-    if baseline:
-        bl_gaps = [float(r["Gap"].replace("%", "")) for r in results if r["Method"] == "GRASP+2opt"]
-        summary["baseline_mean"] = np.mean(bl_gaps)
-        summary["baseline_std"] = np.std(bl_gaps)
-        if verbose:
-            print(f"  Baseline: {summary['baseline_mean']:.2f}% ± {summary['baseline_std']:.2f}%")
-
-    if verbose:
-        print(f"  Results saved to: {output_path}")
-
-    return summary
+    models = {method_name: model_path}
+    return run_grouped_evaluation(
+        inst_type=instance_type,
+        size=size,
+        models=models,
+        splits=splits,
+        time_budget=time_budget,
+        workers=workers,
+        eval_limit=eval_limit,
+        report_baseline=baseline,
+        output_dir=output_dir,
+        verbose=verbose,
+    )
 
 
 def main() -> None:
@@ -339,18 +397,42 @@ def main() -> None:
     with open(args.split_path) as f:
         splits = json.load(f)
 
+    # Group models by (type, size) for efficient evaluation
+    grouped: dict[tuple[str, int], dict[str, str]] = {}
     for model_path in model_paths:
-        print(f"\n{'=' * 60}")
-        print(f"Evaluating: {model_path}")
-        print(f"{'=' * 60}")
+        try:
+            inst_type, size, variant = parse_model_name(model_path)
+            key = (inst_type, size)
+            if key not in grouped:
+                grouped[key] = {}
 
-        run_evaluation(
-            model_path=model_path,
+            # Determine method name
+            if variant == "double":
+                method_name = "Double DQN"
+            elif variant == "standard":
+                method_name = "DQN"
+            else:
+                method_name = "Double DQN"
+
+            grouped[key][method_name] = model_path
+        except ValueError as e:
+            print(f"Skipping {model_path}: {e}")
+
+    # Evaluate each group
+    for (inst_type, size), models in sorted(grouped.items()):
+        print(f"\n{'=' * 60}")
+        print(f"Evaluating: {inst_type} n={size}")
+        print("=" * 60)
+
+        run_grouped_evaluation(
+            inst_type=inst_type,
+            size=size,
+            models=models,
             splits=splits,
             time_budget=args.time_budget,
             workers=n_workers,
             eval_limit=args.limit,
-            baseline=args.baseline,
+            report_baseline=args.baseline,
         )
 
     print("\nEvaluation complete!")

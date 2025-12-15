@@ -111,10 +111,9 @@ def main():
     # Import run functions from modules
     from scripts.generate_splits import run_generate_splits
     from scripts.train_dqn import run_training
-    from scripts.evaluate_dqn import run_evaluation
+    from scripts.evaluate_dqn import run_grouped_evaluation
     from scripts.compare_dqn_double import run_comparison
     from scripts.generate_plots import run_plots
-    from glob import glob
 
     start_time = datetime.now()
     print("=" * 50)
@@ -160,17 +159,35 @@ def main():
 
     timings["training"], _ = run_step("2. Training models", step_train)
 
-    # Step 3: Evaluate models
+    # Step 3: Evaluate models (baseline computed once per instance group)
     def step_evaluate():
         for inst_type in config.types:
-            for model_path in sorted(glob(f"models/dqn/{inst_type}_*.pt")):
-                run_evaluation(
-                    model_path=model_path,
+            for size in config.sizes:
+                # Find all models for this (type, size)
+                models = {}
+                standard_path = Path(f"models/dqn/{inst_type}_n{size:03d}_standard.pt")
+                double_path = Path(f"models/dqn/{inst_type}_n{size:03d}_double.pt")
+                single_path = Path(f"models/dqn/{inst_type}_n{size:03d}.pt")
+
+                if standard_path.exists():
+                    models["DQN"] = str(standard_path)
+                if double_path.exists():
+                    models["Double DQN"] = str(double_path)
+                if single_path.exists() and not models:
+                    models["Double DQN"] = str(single_path)
+
+                if not models:
+                    continue
+
+                run_grouped_evaluation(
+                    inst_type=inst_type,
+                    size=size,
+                    models=models,
                     splits=splits,
                     time_budget=config.time_budget,
                     workers=config.workers,
                     eval_limit=config.eval_limit,
-                    baseline=config.baseline,
+                    report_baseline=config.baseline,
                 )
 
     timings["evaluation"], _ = run_step("3. Evaluating models", step_evaluate)
