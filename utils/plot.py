@@ -901,7 +901,7 @@ def plot_suboptimal_time_analysis(
     else:
         ax.set_title("Execution Time for Suboptimal Instances (gap > 0)")
 
-    plt.tight_layout()
+    #plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path)

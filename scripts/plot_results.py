@@ -109,10 +109,32 @@ sns.lineplot(
     errorbar=None 
 )
 plt.title('Gap evolution by Problem Size', fontsize=14)
-plt.ylabel('Gap to Optimal (%)')
+plt.ylabel('Gap to BFS (%)')
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, '1_scalability_gap_vs_dim.png'))
+plt.savefig(os.path.join(output_dir, '1A_scalability_gap_vs_dim_gap.png'))
+plt.close()
+
+
+plt.figure(figsize=(12, 6))
+sns.lineplot(
+    data=master_df, 
+    x='Dimension', 
+    y='Time (ms)', 
+    hue='Experiment', 
+    style='Experiment', 
+    palette=custom_palette,      # <--- APPLYING COLORS
+    hue_order=logical_order,     # <--- SORTING LEGEND
+    style_order=logical_order,   # <--- SORTING STYLES
+    markers=True, 
+    dashes=False,
+    errorbar=None 
+)
+plt.title('Time evolution by Problem Size', fontsize=14)
+plt.ylabel('Average Time (ms)')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, '1B_scalability_gap_vs_dim_time.png'))
 plt.close()
 
 # --- PLOT B: Efficiency Frontier (Time vs Gap) ---
@@ -142,7 +164,6 @@ plt.savefig(os.path.join(output_dir, '2_efficiency_time_vs_gap.png'))
 plt.close()
 
 # --- PLOT C: Topology Robustness (Gap by Type) ---
-# --- PLOT C: Robustness (Separated by Type) ---
 
 # We use catplot to create a grid of subplots (facets)
 g = sns.catplot(
@@ -171,12 +192,47 @@ if not master_df['Gap'].isnull().all():
 g.set_xticklabels(rotation=45, ha='right')
 
 # Add titles and labels
-g.fig.subplots_adjust(top=0.92) # Make room for the main title
-g.fig.suptitle('Gap Distribution by Problem Type', fontsize=16)
-g.set_axis_labels("", "Gap to Optimal (%)") # Remove X label (redundant)
+g.figure.subplots_adjust(top=0.92) # Make room for the main title
+g.figure.suptitle('Gap Distribution by Problem Type', fontsize=16)
+g.set_axis_labels("", "Gap to BFS (%)") # Remove X label (redundant)
 
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, '3_robustness_type_vs_gap.png'))
+plt.savefig(os.path.join(output_dir, '3A_robustness_type_vs_gap.png'))
+plt.close()
+
+# We use catplot to create a grid of subplots (facets)
+g = sns.catplot(
+    data=master_df, 
+    x='Experiment', 
+    y='Time (ms)', 
+    col='Type',           # <--- This splits the graph into 3 columns
+    kind='violin',        # You can change this to 'box' if you prefer
+    col_wrap=1,           # <--- Stacks them vertically (1 column) for better width
+    aspect=2.5,           # Makes each plot wide enough to read labels
+    height=4,             # Height of each row
+    palette=custom_palette, 
+    hue='Experiment',
+    order=logical_order,  # Ensures the order on X-axis is logical
+    cut=0,                # Don't extend violin past data range
+    sharex=False          # Keeps x-labels independent if needed
+)
+
+# Adjust the Y-axis limit for all plots to zoom in on the important part
+# (Calculated based on 95th percentile to ignore extreme outliers)
+if not master_df['Time (ms)'].isnull().all():
+    y_lim = master_df['Time (ms)'].quantile(0.95) * 1.5
+    g.set(ylim=(0, y_lim))
+
+# Rotate the x-axis labels so they don't overlap
+g.set_xticklabels(rotation=45, ha='right')
+
+# Add titles and labels
+g.figure.subplots_adjust(top=0.92) # Make room for the main title
+g.figure.suptitle('Time Distribution by Problem Type', fontsize=16)
+g.set_axis_labels("", "Average Time (ms)") # Remove X label (redundant)
+
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, '3B_robustness_type_vs_time.png'))
 plt.close()
 
 # --- PLOT D: Convergence Speed (Iterations vs Dimension) ---
@@ -193,4 +249,84 @@ plt.title('Total Iterations by Problem Size', fontsize=14)
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
 plt.savefig(os.path.join(output_dir, '4_convergence_iterations.png'))
+plt.close()
+
+
+# ==========================================
+# 1. PREPARE NORMALIZED DATA
+# ==========================================
+
+# Filter only the relevant experiments
+# We need 'Base' for the math, and 'Trained 50' variants for the plot
+target_experiments = [
+    'Base', 
+    'Trained 50 ATT', 'Trained 50 GEO', 'Trained 50 EUC',
+    'Trained 50 ATT (Time)', 'Trained 50 GEO (Time)', 'Trained 50 EUC (Time)'
+]
+subset_df = master_df[master_df['Experiment'].isin(target_experiments)].copy()
+
+# Aggregate by Experiment and Dimension first
+# We compare the average performance at each dimension
+agg_df = subset_df.groupby(['Experiment', 'Dimension'])[['Gap', 'Time (ms)']].mean().reset_index()
+
+# Extract the 'Base' values to use as the denominator
+base_values = agg_df[agg_df['Experiment'] == 'Base'][['Dimension', 'Gap', 'Time (ms)']]
+base_values = base_values.rename(columns={'Gap': 'Base_Gap', 'Time (ms)': 'Base_Time'})
+
+# Merge Base values back into the main dataframe
+merged_df = pd.merge(agg_df, base_values, on='Dimension', how='left')
+
+# Calculate Ratios
+merged_df['Norm_Gap'] = merged_df['Gap'] / merged_df['Base_Gap']
+merged_df['Norm_Time'] = merged_df['Time (ms)'] / merged_df['Base_Time']
+
+# Remove 'Base' rows from the final plot data (since they would just be 1.0, 1.0)
+plot_df = merged_df[merged_df['Experiment'] != 'Base']
+
+# ==========================================
+# 2. GENERATE FACETED PLOT
+# ==========================================
+
+# Using relplot to create a grid of scatter plots (one per Dimension)
+g = sns.relplot(
+    data=plot_df,
+    x='Norm_Time',
+    y='Norm_Gap',
+    hue='Experiment',
+    col='Dimension',        # Create one subplot per Dimension
+    col_wrap=5,             # 5 graphs per row (adjust based on screen size)
+    palette=custom_palette, # Use your custom colors
+    hue_order=[e for e in logical_order if e in plot_df['Experiment'].unique()],
+    s=150,                  # Marker size
+    edgecolor='black',
+    alpha=0.8,
+    height=3.5,
+    aspect=1
+)
+
+# ==========================================
+# 3. ADD REFERENCE LINES & FORMATTING
+# ==========================================
+
+# Add lines at 1.0 to show the "Base" performance threshold
+for ax in g.axes.flat:
+    ax.axhline(1.0, color='red', linestyle='--', linewidth=1, alpha=0.5)
+    ax.axvline(1.0, color='red', linestyle='--', linewidth=1, alpha=0.5)
+    
+    # Optional: Shade the "Win" quadrant (Bottom-Left)
+    # This highlights models that are strictly better than Base
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    # We set a semi-transparent green box from 0,0 to 1,1
+    import matplotlib.patches as patches
+    rect = patches.Rectangle((0, 0), 1, 1, linewidth=0, edgecolor='none', facecolor='green', alpha=0.05)
+    ax.add_patch(rect)
+
+# Titles
+g.figure.subplots_adjust(top=0.9)
+g.figure.suptitle('Relative Performance vs. Base Model (Normalized)', fontsize=16)
+
+g.set_axis_labels("Normalized Time (x Base)", "Normalized Gap (x Base)")
+
+plt.savefig(os.path.join(output_dir, '5_relative_performance.png'))
 plt.close()
