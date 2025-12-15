@@ -1,0 +1,21 @@
+{
+  "timestamp": "20251215_203153",
+  "types": "EUC_2D ATT GEO",
+  "sizes": "20 40",
+  "episodes": 200,
+  "time_budget": 5.0,
+  "gamma": 0.99,
+  "lr": 0.001,
+  "hidden_dim": 64,
+  "history_len": 1,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "reward_type": "delta",
+  "train_limit": 500,
+  "val_limit": 100,
+  "test_limit": 100,
+  "baseline": true,
+  "compare_double": true,
+  "device": "cpu",
+  "workers": 16
+}
