@@ -2,6 +2,7 @@
 
 import os
 import random
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +16,93 @@ from torch.optim import Adam
 from src.rl.dqn.buffer import ReplayBuffer
 from src.rl.dqn.env import DQNEnv, N_ACTIONS
 from src.rl.dqn.network import QNetwork
+from src.tsp.constructive import grasp
 from src.tsp.instance import TSPInstance, TSPDataset
+from src.tsp.local_search import two_opt_full
+from src.tsp.solution import Solution
+
+
+# =============================================================================
+# Baseline Computation
+# =============================================================================
+
+# GRASP alphas for baseline (same pool as DQN-ILS agent uses)
+_BASELINE_GRASP_ALPHAS = [0.03, 0.1, 0.3]
+
+
+def _compute_baseline(instance: TSPInstance, time_budget: float) -> float:
+    """
+    Compute baseline cost for an instance using GRASP+2opt.
+
+    Runs multiple iterations within time budget, returns best cost found.
+    Uses same GRASP alphas available to DQN-ILS agent for fairness.
+
+    Args:
+        instance: TSP instance.
+        time_budget: Time budget in seconds.
+
+    Returns:
+        Best tour cost found.
+    """
+    t0 = time.perf_counter()
+    best_cost = float("inf")
+
+    while time.perf_counter() - t0 < time_budget:
+        alpha = random.choice(_BASELINE_GRASP_ALPHAS)
+        tour, _ = grasp(instance, alpha=alpha)
+        sol = Solution(tour, instance.dist_matrix, is_closed=True)
+        improved = two_opt_full(sol)
+        if improved.cost < best_cost:
+            best_cost = improved.cost
+
+    return best_cost
+
+
+def _baseline_worker(args: tuple) -> tuple[int, float]:
+    """Worker function for parallel baseline computation."""
+    instance_id, dataset_path, time_budget = args
+    dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
+    instance = next(iter(dataset))
+    baseline_cost = _compute_baseline(instance, time_budget)
+    return instance_id, baseline_cost
+
+
+def compute_baselines_parallel(
+    dataset_path: str,
+    instance_ids: list[int],
+    time_budget: float,
+    n_workers: int,
+    verbose: bool = True,
+) -> dict[int, float]:
+    """
+    Compute baselines for all instances in parallel.
+
+    Args:
+        dataset_path: Path to dataset JSON.
+        instance_ids: List of instance IDs.
+        time_budget: Time budget per instance.
+        n_workers: Number of parallel workers.
+        verbose: Print progress.
+
+    Returns:
+        Dict mapping instance_id to baseline_cost.
+    """
+    if verbose:
+        print(f"  Computing baselines for {len(instance_ids)} instances ({n_workers} workers)...")
+
+    worker_args = [(inst_id, dataset_path, time_budget) for inst_id in instance_ids]
+    baselines = {}
+
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        futures = {executor.submit(_baseline_worker, args): args[0] for args in worker_args}
+        for future in as_completed(futures):
+            inst_id, baseline_cost = future.result()
+            baselines[inst_id] = baseline_cost
+
+    if verbose:
+        print(f"  Baselines computed for {len(baselines)} instances")
+
+    return baselines
 
 
 def get_default_workers() -> int:
@@ -124,17 +211,20 @@ def _episode_worker(args: tuple) -> dict:
     Run a single episode and return transitions.
 
     Args:
-        args: Tuple of (instance_idx, dataset_path, instance_ids, weights, config_dict)
+        args: Tuple of (instance_idx, dataset_path, instance_ids, weights, config_dict, baselines)
 
     Returns:
         Dictionary with transitions, reward, best_gap, and steps.
     """
-    instance_idx, dataset_path, instance_ids, weights, config_dict = args
+    instance_idx, dataset_path, instance_ids, weights, config_dict, baselines = args
 
     # Load instance
     instance_id = instance_ids[instance_idx % len(instance_ids)]
     dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
+
+    # Set pre-computed baseline (avoids redundant computation)
+    instance.set_baseline_cost(baselines[instance_id])
 
     # Create network and load weights
     state_dim = 3 + config_dict["history_len"] * N_ACTIONS
@@ -150,9 +240,9 @@ def _episode_worker(args: tuple) -> dict:
         config_dict["epsilon_end"],
     )
 
-    # Run episode
+    # Run episode (use baseline as reference for state computation)
     time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
-    env = DQNEnv(instance, time_budget, config_dict["history_len"])
+    env = DQNEnv(instance, time_budget, config_dict["history_len"], use_baseline=True)
 
     state = env.reset()
     transitions = []
@@ -209,9 +299,9 @@ def train_dqn(
     """
     Train DQN on a set of TSP instances.
 
-    Supports parallel training when config.n_workers > 1. In parallel mode,
-    dataset_path and instance_ids must be provided so workers can load
-    instances independently.
+    Computes baseline for each instance first (parallel if n_workers > 1),
+    then trains using baseline-relative gaps for consistent state distribution
+    between training and evaluation.
 
     Args:
         instances: List of training instances.
@@ -226,13 +316,35 @@ def train_dqn(
     if not instances:
         raise ValueError("No instances provided")
 
-    # Check parallel requirements
+    # Compute baselines for all instances (once, reused across episodes)
+    n = instances[0].dimension
+    time_budget = compute_time_budget(n, config.time_budget)
+
+    if dataset_path is not None and instance_ids is not None:
+        # Parallel baseline computation
+        n_workers = max(1, config.n_workers)
+        baselines = compute_baselines_parallel(dataset_path, instance_ids, time_budget, n_workers, verbose)
+        # Set baselines on instances
+        for inst, inst_id in zip(instances, instance_ids):
+            inst.set_baseline_cost(baselines[inst_id])
+    else:
+        # Sequential baseline computation
+        if verbose:
+            print(f"  Computing baselines for {len(instances)} instances...")
+        for inst in instances:
+            baseline_cost = _compute_baseline(inst, time_budget)
+            inst.set_baseline_cost(baseline_cost)
+        if verbose:
+            print(f"  Baselines computed")
+
+    # Check parallel requirements for training
     if config.n_workers > 1:
         if dataset_path is None or instance_ids is None:
             raise ValueError("Parallel training (n_workers > 1) requires dataset_path and instance_ids")
-        return _train_dqn_parallel(instances, config, verbose, dataset_path, instance_ids)
+        baselines_dict = {inst_id: inst.baseline_cost for inst_id, inst in zip(instance_ids, instances)}
+        return _train_dqn_parallel(instances, config, verbose, dataset_path, instance_ids, baselines_dict)
 
-    # Sequential training (original implementation)
+    # Sequential training
     return _train_dqn_sequential(instances, config, verbose)
 
 
@@ -267,9 +379,9 @@ def _train_dqn_sequential(
         # Compute epsilon for this episode (logarithmic decay)
         epsilon = compute_epsilon(episode, config.n_episodes, config.epsilon_start, config.epsilon_end)
 
-        # Sample random instance
+        # Sample random instance (baseline already set in train_dqn)
         instance = random.choice(instances)
-        env = DQNEnv(instance, time_budget, config.history_len)
+        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
 
         # Collect episode
         state = env.reset()
@@ -368,11 +480,13 @@ def _train_dqn_parallel(
     verbose: bool,
     dataset_path: str,
     instance_ids: list[int],
+    baselines: dict[int, float],
 ) -> tuple[QNetwork, TrainingStats]:
     """
     Parallel DQN training using batch episodes.
 
     Runs multiple episodes in parallel, aggregates transitions, then updates.
+    Uses pre-computed baselines for consistent state distribution.
     """
     n = instances[0].dimension
     time_budget = compute_time_budget(n, config.time_budget)
@@ -420,7 +534,7 @@ def _train_dqn_parallel(
             }
 
             worker_args = [
-                (episode_counter + i, dataset_path, instance_ids, weights, config_dict)
+                (episode_counter + i, dataset_path, instance_ids, weights, config_dict, baselines)
                 for i in range(episodes_in_batch)
             ]
 
@@ -503,11 +617,14 @@ def _train_dqn_parallel(
 
 def _eval_worker(args: tuple) -> float:
     """Evaluate a single instance (worker function for parallel evaluation)."""
-    instance_id, dataset_path, weights, config_dict = args
+    instance_id, dataset_path, weights, config_dict, baselines = args
 
     # Load instance
     dataset = TSPDataset(dataset_path, [instance_id], verbose=False)
     instance = next(iter(dataset))
+
+    # Set pre-computed baseline
+    instance.set_baseline_cost(baselines[instance_id])
 
     # Create network and load weights
     state_dim = 3 + config_dict["history_len"] * N_ACTIONS
@@ -515,9 +632,9 @@ def _eval_worker(args: tuple) -> float:
     q_net.load_state_dict(weights)
     q_net.eval()
 
-    # Run evaluation episode (greedy policy)
+    # Run evaluation episode (greedy policy, baseline as state reference)
     time_budget = compute_time_budget(instance.dimension, config_dict["time_budget"])
-    env = DQNEnv(instance, time_budget, config_dict["history_len"])
+    env = DQNEnv(instance, time_budget, config_dict["history_len"], use_baseline=True)
 
     state = env.reset()
     done = False
@@ -543,7 +660,8 @@ def evaluate_dqn(
     """
     Evaluate trained DQN on test instances.
 
-    Supports parallel evaluation when config.n_workers > 1 and dataset_path/instance_ids are provided.
+    Computes baseline for each instance first, then runs DQN using baseline
+    as state reference (consistent with training distribution).
 
     Args:
         model: Trained Q-network.
@@ -559,6 +677,26 @@ def evaluate_dqn(
     if not instances:
         return []
 
+    # Compute baselines for all test instances
+    n = instances[0].dimension
+    time_budget = compute_time_budget(n, config.time_budget)
+
+    if dataset_path is not None and instance_ids is not None:
+        # Parallel baseline computation
+        n_workers = max(1, config.n_workers)
+        baselines = compute_baselines_parallel(dataset_path, instance_ids, time_budget, n_workers, verbose=False)
+        # Set baselines on instances
+        for inst, inst_id in zip(instances, instance_ids):
+            inst.set_baseline_cost(baselines[inst_id])
+    else:
+        # Sequential baseline computation
+        baselines = {}
+        for i, inst in enumerate(instances):
+            baseline_cost = _compute_baseline(inst, time_budget)
+            inst.set_baseline_cost(baseline_cost)
+            if instance_ids:
+                baselines[instance_ids[i]] = baseline_cost
+
     # Use parallel evaluation if workers > 1 and we have dataset info
     if config.n_workers > 1 and dataset_path is not None and instance_ids is not None:
         weights = {k: v.cpu() for k, v in model.state_dict().items()}
@@ -568,7 +706,7 @@ def evaluate_dqn(
             "hidden_dim": config.hidden_dim,
         }
 
-        worker_args = [(inst_id, dataset_path, weights, config_dict) for inst_id in instance_ids]
+        worker_args = [(inst_id, dataset_path, weights, config_dict, baselines) for inst_id in instance_ids]
 
         gaps = []
         with ProcessPoolExecutor(max_workers=config.n_workers) as executor:
@@ -589,11 +727,8 @@ def evaluate_dqn(
     model.eval()
     gaps = []
 
-    n = instances[0].dimension if instances else 0
-    time_budget = compute_time_budget(n, config.time_budget)
-
     for i, instance in enumerate(instances):
-        env = DQNEnv(instance, time_budget, config.history_len)
+        env = DQNEnv(instance, time_budget, config.history_len, use_baseline=True)
         state = env.reset()
         done = False
 

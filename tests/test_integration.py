@@ -52,14 +52,15 @@ class TestDQNEnvIntegration:
     def test_env_creation(self, temp_instance_file):
         """DQNEnv should initialize correctly."""
         instance = TSPInstance(temp_instance_file, instance_id=0)
-        env = DQNEnv(instance, time_budget=1.0)
+        # use_baseline=False uses opt_cost as reference (legacy mode for simple tests)
+        env = DQNEnv(instance, time_budget=1.0, use_baseline=False)
         assert env.n_actions == N_ACTIONS
         assert env.state_dim == 3 + 1 * N_ACTIONS  # 3 + history_len * n_actions (default history_len=1)
 
     def test_env_reset_and_step(self, temp_instance_file):
         """DQNEnv reset and step should work correctly."""
         instance = TSPInstance(temp_instance_file, instance_id=0)
-        env = DQNEnv(instance, time_budget=0.5)
+        env = DQNEnv(instance, time_budget=0.5, use_baseline=False)
 
         state = env.reset()
         assert state.to_numpy().shape == (env.state_dim,)

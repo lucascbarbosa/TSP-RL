@@ -92,7 +92,7 @@ class DQNEnv:
         time_budget: float,
         history_len: int = 1,
         k: int | float = 0.5,
-        use_baseline: bool = False,
+        use_baseline: bool = True,
     ) -> None:
         """
         Initialize environment.
@@ -102,8 +102,9 @@ class DQNEnv:
             time_budget: Maximum episode duration in seconds.
             history_len: Number of past actions to track in state.
             k: Neighbor list parameter for 2-opt.
-            use_baseline: If True, use baseline_cost as reference instead of opt_cost.
-                          Useful for evaluation/deployment when optimal is unknown.
+            use_baseline: If True (default), use baseline_cost as reference for state
+                          computation. This ensures consistent distribution between
+                          training and evaluation. baseline_cost must be set on instance.
         """
         self.instance = instance
         self.time_budget = time_budget
@@ -115,16 +116,17 @@ class DQNEnv:
 
         # Reference cost for gap/state calculation
         if use_baseline:
-            # Use baseline (GRASP+2opt) as reference - doesn't need privileged info
-            # baseline_cost must be set before creating env (e.g., by running baseline competitor)
+            # Use baseline (GRASP+2opt) as reference for state computation
+            # This ensures consistent distribution between training and evaluation
+            # baseline_cost must be set before creating env (via train_dqn or evaluate_dqn)
             self.reference_cost = instance.baseline_cost
         else:
-            # Use optimal cost (training mode - requires known optimal)
+            # Legacy mode: use optimal cost as reference (only for backwards compatibility)
             opt_tour = instance.opt_tour
             if not opt_tour:
                 raise ValueError(
                     f"Instance {instance.name} has no opt_tour. "
-                    "Training requires instances with known optimal, or use use_baseline=True."
+                    "Use use_baseline=True (default) or provide instance with known optimal."
                 )
             self.reference_cost = sum(
                 instance.get_weight(opt_tour[i], opt_tour[(i + 1) % len(opt_tour)]) for i in range(len(opt_tour))
