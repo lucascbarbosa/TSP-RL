@@ -71,7 +71,7 @@ class DQNEnv:
     Episode structure:
     1. reset(): Sample instance, generate initial solution, start timer
     2. step(action): Apply (perturbation, local_search), return (state, reward, done)
-    3. Episode ends when time budget is exhausted
+    3. Episode ends when time budget is exhausted or optimal solution is found (gap=0)
     """
 
     def __init__(
@@ -172,9 +172,9 @@ class DQNEnv:
         # Update history
         self.history = self.history[1:] + [action]
 
-        # Check if done (time budget exhausted)
+        # Check if done (time budget exhausted or optimal found)
         elapsed = time.perf_counter() - self.t_start
-        done = elapsed >= self.time_budget
+        done = bool(elapsed >= self.time_budget or self.best_gap <= 1e-8)
 
         return self._get_state(), reward, done
 

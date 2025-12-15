@@ -21,6 +21,7 @@ from src.rl.dqn.trainer import (
     compute_q_matrix,
     compute_time_budget,
     evaluate_dqn,
+    get_default_workers,
     load_model,
     save_model,
     train_dqn,
@@ -51,4 +52,5 @@ __all__ = [
     "save_model",
     "load_model",
     "compute_q_matrix",
+    "get_default_workers",
 ]

@@ -85,10 +85,12 @@ TSP-RL/
 │           ├── env.py            # DQNEnv, ACTION_DECODE, N_ACTIONS
 │           └── trainer.py        # train_dqn, evaluate_dqn, DQNConfig
 ├── scripts/
-│   ├── pipeline.sh               # Pipeline completo (train + eval)
-│   ├── train_dqn.py              # Treinamento DQN
-│   ├── evaluate_dqn.py           # Avaliação de modelos treinados
+│   ├── pipeline.py               # Pipeline Python (recomendado)
+│   ├── pipeline.sh               # Pipeline Bash (alternativo)
+│   ├── train_dqn.py              # Treinamento DQN (paralelo)
+│   ├── evaluate_dqn.py           # Avaliação de modelos (paralela)
 │   ├── generate_splits.py        # Gera splits train/test
+│   ├── generate_plots.py         # Gera gráficos de resultados
 │   └── clear.sh                  # Remove arquivos gerados
 ├── models/
 │   └── dqn/                      # Modelos treinados (.pt)
@@ -103,14 +105,14 @@ TSP-RL/
 ### Pipeline completo (recomendado)
 
 ```bash
-# Executa splits -> treino -> avaliação com defaults para teste rápido
-./scripts/pipeline.sh
+# Pipeline Python (recomendado) - executa splits -> treino -> avaliação -> plots
+python scripts/pipeline.py --types EUC_2D --sizes 10 20 --workers 16
 
-# Customizar tipos e tamanhos
-./scripts/pipeline.sh --types "EUC_2D ATT" --sizes "10 20 30"
+# Pipeline Bash (alternativo)
+./scripts/pipeline.sh --types "EUC_2D" --sizes "10 20" --workers 16
 
 # Ver todas as opções
-./scripts/pipeline.sh --help
+python scripts/pipeline.py --help
 ```
 
 ### Treinar um modelo DQN
@@ -119,8 +121,8 @@ TSP-RL/
 # Gerar splits (se necessário)
 python scripts/generate_splits.py --seed 42
 
-# Treinar para EUC_2D, tamanho 50, 2000 episódios
-python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000
+# Treinar para EUC_2D, tamanho 50, 2000 episódios (16 workers paralelos)
+python scripts/train_dqn.py --type EUC_2D --sizes 50 --episodes 2000 --workers 16
 
 # Treinar múltiplos tamanhos
 python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
@@ -129,10 +131,10 @@ python scripts/train_dqn.py --type EUC_2D --sizes 10 20 30 50 --episodes 1000
 ### Avaliar modelo treinado
 
 ```bash
-# Avaliar um modelo específico
-python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt
+# Avaliar um modelo específico (avaliação paralela de instâncias)
+python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --workers 16
 
-# Avaliar com comparação de baseline (GRASP+2opt, 5 restarts)
+# Avaliar com comparação de baseline (GRASP+2opt, mesmo time budget)
 python scripts/evaluate_dqn.py --model models/dqn/EUC_2D_n050.pt --baseline
 
 # Avaliar todos os modelos de um tipo
@@ -175,13 +177,15 @@ print(f"Gap médio final: {np.mean(stats.episode_best_gaps[-100:]):.2f}%")
 ```python
 from src import TSPDataset, load_model, evaluate_dqn, DQNConfig, N_ACTIONS
 
-# Carregar modelo treinado
-state_dim = 3 + 2 * N_ACTIONS  # 45 com history_len=2
-model = load_model("models/dqn/EUC_2D_n050.pt", state_dim=state_dim)
+# Carregar modelo (arquitetura inferida do checkpoint)
+model = load_model("models/dqn/EUC_2D_n050.pt")
+
+# Inferir history_len do modelo
+history_len = (model.state_dim - 3) // N_ACTIONS
 
 # Avaliar em instâncias de teste
 test_instances = list(TSPDataset("data/EUC_2D.json", instance_ids=range(1000, 1111)))
-config = DQNConfig(time_budget=10.0)
+config = DQNConfig(time_budget=10.0, history_len=history_len)
 
 gaps = evaluate_dqn(model, test_instances, config)
 print(f"Gap médio: {sum(gaps)/len(gaps):.2f}%")
@@ -219,6 +223,7 @@ print(f"Best gap: {env.best_gap:.2f}%")
 | γ (gamma) | `--gamma` | 0.99 | Discount factor |
 | Learning rate | `--lr` | 0.001 | Taxa de aprendizado |
 | Hidden dim | `--hidden_dim` | 64 | Neurônios por camada oculta |
+| Workers | `--workers` | 1 | Workers paralelos (batch episodes) |
 
 ### Configuração completa (`DQNConfig`)
 
@@ -244,6 +249,7 @@ class DQNConfig:
     # Treinamento
     n_episodes: int = 2000
     updates_per_episode: int = 5
+    n_workers: int = 1          # Workers paralelos (batch episodes)
 ```
 
 ## Arquitetura da Rede

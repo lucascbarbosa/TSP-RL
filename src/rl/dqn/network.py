@@ -28,6 +28,9 @@ class QNetwork(nn.Module):
             hidden_dim: Hidden layer size (default: 64).
         """
         super().__init__()
+        self.state_dim = state_dim
+        self.n_actions = n_actions
+        self.hidden_dim = hidden_dim
         self.net = nn.Sequential(
             nn.Linear(state_dim, hidden_dim),
             nn.ReLU(),
