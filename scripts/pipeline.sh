@@ -1,10 +1,12 @@
 #!/bin/bash
 #
-# DQN-ILS Pipeline wrapper - invoca pipeline.py com os parâmetros recebidos.
+# DQN-ILS Pipeline wrapper - invoca pipeline.py e organiza outputs.
 #
 # Usage:
 #     ./scripts/pipeline.sh                         # defaults
 #     ./scripts/pipeline.sh --types "EUC_2D ATT" --sizes "10 20"
+#
+# Outputs são movidos para experiments/<timestamp>_<params>/
 
 set -e
 
@@ -61,7 +63,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Invoke pipeline.py
-exec python scripts/pipeline.py \
+python scripts/pipeline.py \
     --types $TYPES \
     --sizes $SIZES \
     --episodes "$EPISODES" \
@@ -80,3 +82,72 @@ exec python scripts/pipeline.py \
     --workers "$WORKERS" \
     $BASELINE \
     $COMPARE_DOUBLE
+
+# =============================================================================
+# Organize outputs into experiment folder
+# =============================================================================
+
+# Build folder name: YYYYMMDD_HHMMSS_<types>_n<sizes>_ep<episodes>_<reward>
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+TYPES_SLUG=$(echo "$TYPES" | tr ' ' '-')
+SIZES_SLUG=$(echo "$SIZES" | tr ' ' '-')
+EXP_NAME="${TIMESTAMP}_${TYPES_SLUG}_n${SIZES_SLUG}_ep${EPISODES}_${REWARD_TYPE}"
+EXP_DIR="experiments/${EXP_NAME}"
+
+echo
+echo "=================================================="
+echo "Organizing outputs to: $EXP_DIR"
+echo "=================================================="
+
+mkdir -p "$EXP_DIR"
+
+# Save parameters as JSON
+cat > "$EXP_DIR/params.json" << EOF
+{
+  "timestamp": "$TIMESTAMP",
+  "types": "$TYPES",
+  "sizes": "$SIZES",
+  "episodes": $EPISODES,
+  "time_budget": $TIME_BUDGET,
+  "gamma": $GAMMA,
+  "lr": $LR,
+  "hidden_dim": $HIDDEN_DIM,
+  "history_len": $HISTORY_LEN,
+  "epsilon_start": $EPSILON_START,
+  "epsilon_end": $EPSILON_END,
+  "reward_type": "$REWARD_TYPE",
+  "train_limit": $TRAIN_LIMIT,
+  "val_limit": $VAL_LIMIT,
+  "test_limit": $TEST_LIMIT,
+  "baseline": $([ -z "$BASELINE" ] && echo "true" || echo "false"),
+  "compare_double": $([ -z "$COMPARE_DOUBLE" ] && echo "true" || echo "false"),
+  "device": "$DEVICE",
+  "workers": $WORKERS
+}
+EOF
+
+# Move generated files
+if [ -d "models/dqn" ] && [ "$(ls -A models/dqn 2>/dev/null)" ]; then
+    mv models/dqn "$EXP_DIR/models"
+    mkdir -p models/dqn  # recreate empty dir
+    echo "  Moved: models/dqn/ -> $EXP_DIR/models/"
+fi
+
+if [ -d "data/results" ] && [ "$(ls -A data/results 2>/dev/null)" ]; then
+    mv data/results "$EXP_DIR/results"
+    mkdir -p data/results
+    echo "  Moved: data/results/ -> $EXP_DIR/results/"
+fi
+
+if [ -d "data/plots" ] && [ "$(ls -A data/plots 2>/dev/null)" ]; then
+    mv data/plots "$EXP_DIR/plots"
+    mkdir -p data/plots
+    echo "  Moved: data/plots/ -> $EXP_DIR/plots/"
+fi
+
+echo
+echo "Experiment saved to: $EXP_DIR"
+echo "  params.json - experiment configuration"
+echo "  models/     - trained models and stats"
+echo "  results/    - evaluation CSVs"
+echo "  plots/      - generated plots"
