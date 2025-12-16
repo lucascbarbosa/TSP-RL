@@ -256,17 +256,19 @@ echo "============================================================"
 # =============================================================================
 # Verificar se mais episódios melhora ou se 200 é suficiente
 
-run_experiment "10a_episodes_short" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 100 \
-    --reward_type delta
+# [DONE] 20251215_230602_EUC_2D_n20_ep100_delta
+# run_experiment "10a_episodes_short" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 100 \
+#     --reward_type delta
 
-run_experiment "10b_episodes_long" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 400 \
-    --reward_type delta
+# [DONE] 20251215_230914_EUC_2D_n20_ep400_delta
+# run_experiment "10b_episodes_long" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 400 \
+#     --reward_type delta
 
 # =============================================================================
 # 11. Ablação: Gamma (discount factor)
