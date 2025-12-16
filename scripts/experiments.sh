@@ -181,6 +181,108 @@ echo "============================================================"
 #     --val_limit 80 \
 #     --test_limit 80
 
+# =============================================================================
+# 7. Teste de Robustez: Mesma configuração, múltiplas runs
+# =============================================================================
+# Objetivo: Verificar se resultados são reprodutíveis (gaps médios, ações, etc.)
+# Config: Double DQN + sparse, n=30 (onde sparse foi claramente melhor)
+
+# [DONE] 20251215_225140_EUC_2D_n30_ep150_sparse
+# run_experiment "7a_robustness_run1" \
+#     --types "EUC_2D" \
+#     --sizes "30" \
+#     --episodes 150 \
+#     --reward_type sparse
+
+# [DONE] 20251215_225352_EUC_2D_n30_ep150_sparse
+# run_experiment "7b_robustness_run2" \
+#     --types "EUC_2D" \
+#     --sizes "30" \
+#     --episodes 150 \
+#     --reward_type sparse
+
+# [DONE] 20251215_225605_EUC_2D_n30_ep150_sparse
+# run_experiment "7c_robustness_run3" \
+#     --types "EUC_2D" \
+#     --sizes "30" \
+#     --episodes 150 \
+#     --reward_type sparse
+
+# =============================================================================
+# 8. Ablação: Learning Rate
+# =============================================================================
+# Default: lr=0.001. Testar 0.0003 (mais conservador) e 0.003 (mais agressivo)
+# n=20 para rapidez
+
+run_experiment "8a_lr_low" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --lr 0.0003 \
+    --reward_type delta
+
+run_experiment "8b_lr_high" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --lr 0.003 \
+    --reward_type delta
+
+# =============================================================================
+# 9. Ablação: Capacidade da Rede (hidden_dim)
+# =============================================================================
+# Default: hidden_dim=64. Testar 32 (menor) e 128 (maior)
+
+run_experiment "9a_hidden_small" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --hidden_dim 32 \
+    --reward_type delta
+
+run_experiment "9b_hidden_large" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --hidden_dim 128 \
+    --reward_type delta
+
+# =============================================================================
+# 10. Ablação: Número de Episódios (convergência)
+# =============================================================================
+# Verificar se mais episódios melhora ou se 200 é suficiente
+
+run_experiment "10a_episodes_short" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 100 \
+    --reward_type delta
+
+run_experiment "10b_episodes_long" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 400 \
+    --reward_type delta
+
+# =============================================================================
+# 11. Ablação: Gamma (discount factor)
+# =============================================================================
+# Default: gamma=0.99. Testar 0.95 (mais míope) e 0.999 (mais longe)
+
+run_experiment "11a_gamma_low" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --gamma 0.95 \
+    --reward_type delta
+
+run_experiment "11b_gamma_high" \
+    --types "EUC_2D" \
+    --sizes "20" \
+    --episodes 150 \
+    --gamma 0.999 \
+    --reward_type delta
+
 # -----------------------------------------------------------------------------
 # Resumo
 # -----------------------------------------------------------------------------
