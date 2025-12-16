@@ -9,6 +9,44 @@
 #     ./scripts/experiments.sh --dry-run # Mostra comandos sem executar
 #
 # Outputs vão para experiments/<timestamp>_<params>/
+#
+# =============================================================================
+# DESCOBERTAS PRINCIPAIS (resumo dos experimentos)
+# =============================================================================
+#
+# 1. DELTA vs SPARSE REWARD
+#    - Delta vence na maioria dos tamanhos (n=20, 40, 50, 70)
+#    - Sparse só é melhor para n=30 (val_gap 1.75% vs 3.37%)
+#    - Delta é mais robusto e consistente em geral
+#
+# 2. DOUBLE vs STANDARD DQN
+#    - Double DQN melhor para n pequeno (20-30) e n grande (70)
+#    - Standard DQN melhor para n intermediário (40-50)
+#    - Q-overestimation do Standard é 2-4x maior que Double
+#    - Q-overestimation não necessariamente prejudica performance
+#
+# 3. LEARNING RATE
+#    - lr=0.0003 foi excepcional para n=20 (val_gap=0.10%)
+#    - lr=0.0003 também ajuda Double DQN n=50 (4.87% vs 8.56%)
+#    - Para n=70, lr=0.001 (default) é melhor
+#
+# 4. OUTROS HIPERPARÂMETROS
+#    - hidden_dim=128: ajuda Double DQN (0.98% vs 1.30% para n=20)
+#    - gamma=0.999: ajuda Standard DQN (0.75% vs 1.07% para n=20)
+#    - episodes=400: não melhora, só aumenta Q-overestimation
+#
+# 5. ROBUSTEZ
+#    - Variância de ~1% entre runs idênticas
+#    - Tendências são consistentes apesar da variância
+#
+# 6. MELHOR CONFIG POR TAMANHO (EUC_2D)
+#    - n=20: Standard DQN + delta + lr=0.0003 → 0.10%
+#    - n=30: Double DQN + sparse             → 1.75%
+#    - n=40: Standard DQN + delta            → 4.81%
+#    - n=50: Standard DQN + delta            → 4.04%
+#    - n=70: Double DQN + delta              → 2.69%
+#
+# =============================================================================
 
 set -e
 
@@ -315,6 +353,95 @@ echo "============================================================"
 #     --lr 0.0003 \
 #     --time_budget 10.0 \
 #     --reward_type delta
+
+# #############################################################################
+# #############################################################################
+#
+#                           RUN FINAL
+#
+# #############################################################################
+# #############################################################################
+#
+# Configuração baseada nas descobertas dos experimentos anteriores:
+#   - lr=0.0003: excepcional para n=20 (0.10%), bom para Double DQN n=50
+#   - delta: mais robusto que sparse na maioria dos tamanhos
+#   - Double DQN: melhor para n pequeno (20-30) e grande (70)
+#   - Standard DQN: melhor para n intermediário (40-50)
+#
+# Esta run usa:
+#   - Todas as instâncias de teste disponíveis (por tamanho)
+#   - Mais instâncias de treino/validação
+#   - Mais episódios para convergência
+#   - Configuração otimizada (lr=0.0003)
+#
+# Tempo estimado: ~2-3 horas (depende do hardware)
+# #############################################################################
+
+# =============================================================================
+# 13. Run Final: EUC_2D Completa
+# =============================================================================
+# Todos os tamanhos relevantes com config otimizada
+# train_limit/val_limit/test_limit = 0 significa "usar todas disponíveis para o tamanho"
+
+# [DONE] 20251216_005711_EUC_2D_n20-30-40-50-70_ep300_delta
+# run_experiment "FINAL_EUC2D_all_sizes" \
+#     --types "EUC_2D" \
+#     --sizes "20 30 40 50 70" \
+#     --episodes 300 \
+#     --lr 0.0003 \
+#     --time_budget 10.0 \
+#     --reward_type delta \
+#     --train_limit 800 \
+#     --val_limit 200 \
+#     --test_limit 200
+
+# =============================================================================
+# 14. Run Final: Generalização (ATT e GEO)
+# =============================================================================
+# Verificar se configuração otimizada generaliza para outros tipos
+
+run_experiment "FINAL_ATT_GEO" \
+    --types "ATT GEO" \
+    --sizes "20 30 40" \
+    --episodes 250 \
+    --lr 0.0003 \
+    --time_budget 8.0 \
+    --reward_type delta \
+    --train_limit 600 \
+    --val_limit 150 \
+    --test_limit 150
+
+# =============================================================================
+# 15. Run Final: Escalabilidade Extrema (n=100)
+# =============================================================================
+# Testar limite de escalabilidade do método
+
+run_experiment "FINAL_n100" \
+    --types "EUC_2D" \
+    --sizes "100" \
+    --episodes 400 \
+    --lr 0.0003 \
+    --time_budget 20.0 \
+    --reward_type delta \
+    --train_limit 500 \
+    --val_limit 100 \
+    --test_limit 100
+
+# =============================================================================
+# 16. Run Final: Sparse para n=30 (onde foi melhor)
+# =============================================================================
+# Confirmação do melhor caso do sparse com mais dados
+
+run_experiment "FINAL_sparse_n30" \
+    --types "EUC_2D" \
+    --sizes "30" \
+    --episodes 300 \
+    --lr 0.0003 \
+    --time_budget 8.0 \
+    --reward_type sparse \
+    --train_limit 800 \
+    --val_limit 200 \
+    --test_limit 200
 
 # -----------------------------------------------------------------------------
 # Resumo
