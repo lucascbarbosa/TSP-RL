@@ -1,0 +1,63 @@
+' etc/new-plantuml/dqn_episode_flow.plantuml
+' Fluxo de um episódio DQN-ILS (compacto)
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 8
+
+skinparam activity {
+  BackgroundColor #E3F2FD
+  BorderColor #005293
+  FontColor #0D47A1
+  DiamondBackgroundColor #FFF3E0
+  DiamondBorderColor #E65100
+  DiamondFontColor #E65100
+}
+
+skinparam ArrowColor #005293
+skinparam ArrowThickness 2
+
+title Episódio DQN-ILS
+
+start
+
+:Selecionar instância TSP;
+
+:Gerar solução inicial
+(GRASP + 2-opt DLB);
+
+:s ← estado inicial
+(g, g_best, t_ratio, history);
+
+:Iniciar timer;
+
+repeat
+  if (random() < ε?) then (sim)
+    :Ação **aleatória**
+    (diversificação);
+  else (não)
+    :a = argmax Q(s, a)
+    (intensificação);
+  endif
+
+  :Aplicar ação a
+  (perturbação + busca local);
+
+  :Calcular r, s';
+
+  :Buffer ← (s, a, r, s', done);
+
+  :s ← s';
+
+repeat while (tempo < T?)
+->tempo esgotado;
+
+:Retornar melhor solução;
+
+stop
+
+@enduml

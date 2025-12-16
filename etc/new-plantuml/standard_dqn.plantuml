@@ -1,0 +1,39 @@
+' etc/new-plantuml/standard_dqn.plantuml
+' Standard DQN - Target calculation
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam roundcorner 8
+
+skinparam card {
+  BackgroundColor #FFFFFF
+  BorderColor #1565C0
+  BorderThickness 2
+}
+
+title **Standard DQN**
+
+card "**Fórmula do Target**" as F #E3F2FD {
+  card "y = r + γ · max_a Q_θ⁻(s', a)" as EQ #BBDEFB
+}
+
+card "**Problema**" as P #FFCDD2 {
+  card "Superestimação\nmax_a Q ≥ Q(a*)\nErro positivo acumulado" as ERR #FFEBEE
+}
+
+card "**Uso das Redes**" as N #E3F2FD {
+  card "Target (θ⁻):\n• seleciona ação\n• avalia ação" as NET #BBDEFB
+}
+
+F -[hidden]down-> P
+P -[hidden]down-> N
+
+note bottom of N
+  Q-values: ~1.5-2.3
+end note
+
+@enduml

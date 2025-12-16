@@ -1,0 +1,39 @@
+' etc/new-plantuml/double_dqn.plantuml
+' Double DQN - Target calculation
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam roundcorner 8
+
+skinparam card {
+  BackgroundColor #FFFFFF
+  BorderColor #006446
+  BorderThickness 2
+}
+
+title **Double DQN**
+
+card "**Fórmula do Target**" as F #E8F5E9 {
+  card "a* = argmax_a Q_θ(s', a)\ny = r + γ · Q_θ⁻(s', a*)" as EQ #C8E6C9
+}
+
+card "**Solução**" as S #E8F5E9 {
+  card "Desacoplamento\nSeleção ≠ Avaliação\nReduz viés positivo" as SOL #C8E6C9
+}
+
+card "**Uso das Redes**" as N #E8F5E9 {
+  card "Online (θ): seleciona\nTarget (θ⁻): avalia" as NET #C8E6C9
+}
+
+F -[hidden]down-> S
+S -[hidden]down-> N
+
+note bottom of N
+  Q-values: ~0.2-0.8
+end note
+
+@enduml

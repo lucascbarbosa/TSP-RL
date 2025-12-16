@@ -1,0 +1,55 @@
+' etc/new-plantuml/dqn_mdp_mapping.plantuml
+' Mapeamento MDP para o DQN-ILS (estado contínuo)
+@startuml
+<style>
+  .MDP {
+    BackGroundColor: #E3F2FD;
+    FontColor: #0D47A1;
+  }
+  .DQN {
+    BackGroundColor: #FCE4EC;
+    FontColor: #880E4F;
+  }
+</style>
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam backgroundColor #FAFAFA
+skinparam DefaultTextAlignment center
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #005293
+skinparam ArrowThickness 2
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #005293
+  FontColor #2D2D2D
+}
+
+top to bottom direction
+
+title Modelagem MDP no DQN-ILS
+
+rectangle "**MDP Genérico**" as MDP <<MDP>> {
+  rectangle "S: Estados" as S_MDP
+  rectangle "A: Ações" as A_MDP
+  rectangle "T: Transições" as T_MDP
+  rectangle "R: Recompensas" as R_MDP
+}
+
+rectangle "**DQN-ILS (TSP)**" as DQN <<DQN>> {
+  rectangle "**Estado contínuo** (19 dims)\n─────────────────\ng: gap normalizado\ng_best: melhor gap\nt_ratio: tempo restante\nhistory: ações recentes" as S_DQN
+  rectangle "**16 ações**\n(perturbação, busca local)\n─────────────────\ntwo_swap, segment_reverse,\nnearest, cheapest,\ngrasp_α × {dlb, full, LK}" as A_DQN
+  rectangle "**Transições implícitas**\nAprendidas via\nexperience replay" as T_DQN
+  rectangle "**Delta**: melhoria no gap\n**Sparse**: gap final\n(r = g_old - g_new)" as R_DQN
+}
+
+S_MDP -down-> S_DQN
+A_MDP -down-> A_DQN
+T_MDP -down-> T_DQN
+R_MDP -down-> R_DQN
+
+hide <<MDP>> stereotype
+hide <<DQN>> stereotype
+
+@enduml

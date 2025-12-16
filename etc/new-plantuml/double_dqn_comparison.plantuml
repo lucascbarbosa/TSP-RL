@@ -1,0 +1,60 @@
+' etc/new-plantuml/double_dqn_comparison.plantuml
+' Comparação Standard DQN vs Double DQN - Layout horizontal
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+
+left to right direction
+
+skinparam card {
+  BackgroundColor #FFFFFF
+  BorderColor #006446
+  BorderThickness 2
+}
+
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #F9A825
+}
+
+title Cálculo do Target: Standard DQN vs Double DQN
+
+card "**Standard DQN**" as STD #E3F2FD {
+  card "**Fórmula**" as STD_F #BBDEFB {
+    card "y = r + γ · max_a Q_θ⁻(s', a)" as STD_EQ #FFFFFF
+  }
+  card "**Problema**" as STD_P #FFCDD2 {
+    card "Superestimação:\nmax_a Q ≥ Q(a*)\nErro positivo acumulado" as STD_ERR #FFFFFF
+  }
+  card "**Redes**" as STD_N #E1F5FE {
+    card "Target (θ⁻):\n• seleciona ação\n• avalia ação" as STD_NET #FFFFFF
+  }
+}
+
+card "**Double DQN**" as DBL #E8F5E9 {
+  card "**Fórmula**" as DBL_F #C8E6C9 {
+    card "a* = argmax_a Q_θ(s', a)\ny = r + γ · Q_θ⁻(s', a*)" as DBL_EQ #FFFFFF
+  }
+  card "**Solução**" as DBL_S #C8E6C9 {
+    card "Desacoplamento:\nSeleção ≠ Avaliação\nReduz viés positivo" as DBL_SOL #FFFFFF
+  }
+  card "**Redes**" as DBL_N #E1F5FE {
+    card "Online (θ): seleciona\nTarget (θ⁻): avalia" as DBL_NET #FFFFFF
+  }
+}
+
+STD -[hidden]right-> DBL
+
+note bottom of STD
+  Q-values observados: ~1.5-2.3
+end note
+
+note bottom of DBL
+  Q-values observados: ~0.2-0.8
+end note
+
+@enduml

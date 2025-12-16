@@ -1,0 +1,51 @@
+' etc/new-plantuml/dqn_architecture.plantuml
+' Arquitetura da Q-Network (MLP) - Layout horizontal
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #006446
+skinparam ArrowThickness 2
+
+left to right direction
+
+skinparam rectangle {
+  BackgroundColor #E8F5E9
+  BorderColor #006446
+  BorderThickness 2
+  FontColor #1B5E20
+}
+
+title Q-Network: Arquitetura MLP (~6.5K parâmetros)
+
+rectangle "**Estado s**\n(19 dims)\n─────────\ng: gap\ng_best\nt_ratio\nhistory[16]" as INPUT #E3F2FD
+
+rectangle "**Hidden 1**\nLinear(19→64)\n+ ReLU" as H1 #C8E6C9
+
+rectangle "**Hidden 2**\nLinear(64→64)\n+ ReLU" as H2 #C8E6C9
+
+rectangle "**Output**\nLinear(64→16)\n─────────\nQ(s,a₀)...Q(s,a₁₅)" as OUTPUT #E3F2FD
+
+INPUT --> H1 : 19
+H1 --> H2 : 64
+H2 --> OUTPUT : 64
+
+note bottom of INPUT
+  **Componentes do estado:**
+  • g: gap normalizado (log)
+  • g_best: melhor gap
+  • t_ratio: tempo/T
+  • history: one-hot
+end note
+
+note bottom of OUTPUT
+  **16 ações:**
+  Cada Q(s,a) estima
+  retorno esperado
+end note
+
+@enduml

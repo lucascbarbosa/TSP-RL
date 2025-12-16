@@ -1,0 +1,57 @@
+' etc/new-plantuml/dqn_action_space.plantuml
+' Espaço de ações do DQN-ILS (16 ações)
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam ArrowColor #005293
+skinparam ArrowThickness 2
+
+left to right direction
+
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #005293
+  BorderThickness 2
+}
+
+title Espaço de Ações: 16 combinações (perturbação × busca local)
+
+rectangle "**Perturbações**" as PERT #E3F2FD {
+  rectangle "two_swap\n(troca 2 cidades)" as P1 #BBDEFB
+  rectangle "segment_reverse\n(inverte segmento)" as P2 #BBDEFB
+  rectangle "nearest\n(reconstrói com NN)" as P3 #90CAF9
+  rectangle "cheapest\n(reconstrói com CI)" as P4 #90CAF9
+  rectangle "grasp_α\n(α ∈ {0.03, 0.1, 0.3})" as P5 #FFF9C4
+}
+
+rectangle "**Buscas Locais**" as LS #E3F2FD {
+  rectangle "2-opt DLB\n(rápido)" as L1 #BBDEFB
+  rectangle "2-opt Full\n(melhor qualidade)" as L2 #BBDEFB
+  rectangle "Lin-Kernighan\n(cadeias de 2-opt)" as L3 #FFCCBC
+}
+
+rectangle "**Ação a = (pert, ls)**\n16 combinações" as ACTION #E3F2FD
+
+PERT --> ACTION
+LS --> ACTION
+
+note left of PERT
+  **Tipos:**
+  • Leves: two_swap, segment_reverse
+  • Restart: nearest, cheapest
+  • GRASP: diversificação controlada
+end note
+
+note left of LS
+  **Trade-off:**
+  • dlb: O(n·k), mais rápido
+  • full: O(n²), melhor solução
+  • LK: variável, mais potente
+end note
+
+@enduml

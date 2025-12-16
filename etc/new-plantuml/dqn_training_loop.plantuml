@@ -1,0 +1,72 @@
+' etc/new-plantuml/dqn_training_loop.plantuml
+' Loop de treinamento DQN (compacto, cores semânticas)
+@startuml
+
+skinparam Dpi 300
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 11
+skinparam backgroundColor transparent
+skinparam shadowing false
+skinparam roundcorner 8
+
+' Cores semânticas:
+' - Azul: inicialização/resultado (setup)
+' - Verde: episódio (coleta de experiência)
+' - Âmbar: update (aprendizado)
+' - Roxo: sync (sincronização de redes)
+
+skinparam activity {
+  BackgroundColor #E3F2FD
+  BorderColor #01579B
+  FontColor #0D47A1
+  DiamondBackgroundColor #FFF3E0
+  DiamondBorderColor #E65100
+  DiamondFontColor #BF360C
+}
+
+skinparam ArrowColor #005293
+skinparam ArrowThickness 2
+
+skinparam swimlane {
+  BorderColor #78909C
+}
+
+title Loop de Treinamento DQN-ILS
+
+|#E3F2FD|Inicialização|
+start
+:Q-Network θ, Target θ⁻ ← θ
+Replay Buffer D ← ∅
+Baselines (GRASP+2opt);
+
+|#E8F5E9|Episódio|
+repeat
+  #C8E6C9:ε ← decay(ep);
+  #C8E6C9:Executar episódio ε-greedy
+  D ← D ∪ transições;
+
+  |#FFF8E1|Update|
+  if (|D| ≥ min?) then (sim)
+    #FFE082:Batch B ~ D;
+    if (Double DQN?) then (sim)
+      #FFE082:a* = argmax Q_θ(s')
+      y = r + γ Q_θ⁻(s', a*);
+    else (não)
+      #FFE082:y = r + γ max Q_θ⁻(s');
+    endif
+    #FFE082:L = MSE(Q_θ(s,a), y)
+    θ ← θ - α∇L;
+  endif
+
+  |#F3E5F5|Sync|
+  if (ep % freq == 0?) then (sim)
+    #E1BEE7:θ⁻ ← θ;
+  endif
+
+repeat while (ep < N?)
+
+|#E3F2FD|Resultado|
+#BBDEFB:Retornar Q-Network θ;
+stop
+
+@enduml
