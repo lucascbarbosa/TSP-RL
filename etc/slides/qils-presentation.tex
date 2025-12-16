@@ -165,7 +165,7 @@
   \vspace{4mm}
   \begin{calloutbox}
     {\scriptsize
-    Foco em reduzir o \emph{gap} (em relação ao ótimo conhecido) de forma automática, sem ajuste manual de parâmetros.
+    Foco em reduzir o \emph{gap} (em relação à melhor solução conhecida) de forma automática, sem ajuste manual de parâmetros.
     }
   \end{calloutbox}
 \end{frame}
@@ -309,13 +309,13 @@
     $2 < \text{gap} \leq 5$ & 1 & 50 & Bom \\
     $5 < \text{gap} \leq 10$ & 2 & 25 & Regular \\
     $\text{gap} > 10$ & 3 & 0 & Ruim \\
-    $\text{gap} < 0$ & 4 & 100 & Melhor que ótimo \\
+    $\text{gap} < 0$ & 4 & 100 & Melhor que bfs \\
     \bottomrule
   \end{tabular}
   \vspace{4mm}
 
   \[
-    \text{gap} = \frac{\text{custo}_{\text{atual}} - \text{custo}_{\text{ótimo}}}{\text{custo}_{\text{ótimo}}} \times 100\%
+    \text{gap} = \frac{\text{custo}_{\text{atual}} - \text{custo}_{\text{bfs}}}{\text{custo}_{\text{bfs}}} \times 100\%
   \]
 \end{frame}
 
@@ -448,7 +448,7 @@
     \begin{column}{0.5\textwidth}
       \textbf{Métricas:}
       \begin{itemize}
-        \item Gap percentual ao ótimo
+        \item Gap percentual ao bfs
         \item Tempo de execução
         \item Variância entre repetições
       \end{itemize}
@@ -541,7 +541,7 @@
       \begin{alertbox}
         {\scriptsize
         \textbf{Limitações:} \\[1mm]
-        $\bullet$ Requer ótimo conhecido no treino \\
+        $\bullet$ Requer bfs conhecido no treino \\
         $\bullet$ Discretização simplista \\
         $\bullet$ Tempo cresce com $n$
         }
@@ -568,7 +568,7 @@
     \begin{column}{0.5\textwidth}
       \textbf{Desafios:}
       \begin{itemize}
-        \item Dependência do ótimo conhecido
+        \item Dependência do bfs conhecido
         \item Balanceamento $\epsilon$ \\ \sutil{(diversificação / intensificação)}
         \item Generalização \emph{cross-domain}
       \end{itemize}
