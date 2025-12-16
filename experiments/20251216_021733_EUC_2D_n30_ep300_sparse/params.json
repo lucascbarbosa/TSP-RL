@@ -1,0 +1,21 @@
+{
+  "timestamp": "20251216_021733",
+  "types": "EUC_2D",
+  "sizes": "30",
+  "episodes": 300,
+  "time_budget": 8.0,
+  "gamma": 0.99,
+  "lr": 0.0003,
+  "hidden_dim": 64,
+  "history_len": 1,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "reward_type": "sparse",
+  "train_limit": 800,
+  "val_limit": 200,
+  "test_limit": 200,
+  "baseline": true,
+  "compare_double": true,
+  "device": "cpu",
+  "workers": 16
+}

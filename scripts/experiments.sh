@@ -434,16 +434,17 @@ echo "============================================================"
 # =============================================================================
 # Confirmação do melhor caso do sparse com mais dados
 
-run_experiment "FINAL_sparse_n30" \
-    --types "EUC_2D" \
-    --sizes "30" \
-    --episodes 300 \
-    --lr 0.0003 \
-    --time_budget 8.0 \
-    --reward_type sparse \
-    --train_limit 800 \
-    --val_limit 200 \
-    --test_limit 200
+# [DONE] 20251216_021733_EUC_2D_n30_ep300_sparse
+# run_experiment "FINAL_sparse_n30" \
+#     --types "EUC_2D" \
+#     --sizes "30" \
+#     --episodes 300 \
+#     --lr 0.0003 \
+#     --time_budget 8.0 \
+#     --reward_type sparse \
+#     --train_limit 800 \
+#     --val_limit 200 \
+#     --test_limit 200
 
 # -----------------------------------------------------------------------------
 # Resumo
