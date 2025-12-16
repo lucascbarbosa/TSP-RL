@@ -129,12 +129,13 @@ echo "============================================================"
 #     --epsilon_start 1.0 \
 #     --epsilon_end 0.05
 
-run_experiment "5b_epsilon_greedy_early" \
-    --types "EUC_2D" \
-    --sizes "20 30" \
-    --episodes 200 \
-    --epsilon_start 0.5 \
-    --epsilon_end 0.01
+# [DONE] 20251215_213008_EUC_2D_n20-30_ep200_delta (ε=0.5→0.01)
+# run_experiment "5b_epsilon_greedy_early" \
+#     --types "EUC_2D" \
+#     --sizes "20 30" \
+#     --episodes 200 \
+#     --epsilon_start 0.5 \
+#     --epsilon_end 0.01
 
 # [SKIP] Redundante - epsilon_end alto causa instabilidade sem benefício claro
 # run_experiment "5c_epsilon_more_exploration" \
