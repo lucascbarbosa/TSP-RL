@@ -275,19 +275,21 @@ echo "============================================================"
 # =============================================================================
 # Default: gamma=0.99. Testar 0.95 (mais míope) e 0.999 (mais longe)
 
-run_experiment "11a_gamma_low" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --gamma 0.95 \
-    --reward_type delta
+# [DONE] 20251215_231115_EUC_2D_n20_ep150_delta
+# run_experiment "11a_gamma_low" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --gamma 0.95 \
+#     --reward_type delta
 
-run_experiment "11b_gamma_high" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --gamma 0.999 \
-    --reward_type delta
+# [DONE] 20251215_231317_EUC_2D_n20_ep150_delta
+# run_experiment "11b_gamma_high" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --gamma 0.999 \
+#     --reward_type delta
 
 # -----------------------------------------------------------------------------
 # Resumo
