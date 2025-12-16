@@ -109,14 +109,14 @@ echo "============================================================"
 #     --time_budget 10.0 \
 #     --reward_type sparse
 
+# [DONE] 20251215_212533_EUC_2D_n50-70_ep300_delta
 # Comparação direta delta vs sparse em instâncias grandes
-# Se a hipótese estiver correta, delta terá gaps maiores que sparse
-run_experiment "4b_scalability_delta" \
-    --types "EUC_2D" \
-    --sizes "50 70" \
-    --episodes 300 \
-    --time_budget 10.0 \
-    --reward_type delta
+# run_experiment "4b_scalability_delta" \
+#     --types "EUC_2D" \
+#     --sizes "50 70" \
+#     --episodes 300 \
+#     --time_budget 10.0 \
+#     --reward_type delta
 
 # -----------------------------------------------------------------------------
 # 5. Ablação: Efeito do Epsilon
