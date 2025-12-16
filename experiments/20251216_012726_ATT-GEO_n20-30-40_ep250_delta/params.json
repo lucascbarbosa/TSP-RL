@@ -1,0 +1,21 @@
+{
+  "timestamp": "20251216_012726",
+  "types": "ATT GEO",
+  "sizes": "20 30 40",
+  "episodes": 250,
+  "time_budget": 8.0,
+  "gamma": 0.99,
+  "lr": 0.0003,
+  "hidden_dim": 64,
+  "history_len": 1,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "reward_type": "delta",
+  "train_limit": 600,
+  "val_limit": 150,
+  "test_limit": 150,
+  "baseline": true,
+  "compare_double": true,
+  "device": "cpu",
+  "workers": 16
+}

@@ -400,16 +400,17 @@ echo "============================================================"
 # =============================================================================
 # Verificar se configuração otimizada generaliza para outros tipos
 
-run_experiment "FINAL_ATT_GEO" \
-    --types "ATT GEO" \
-    --sizes "20 30 40" \
-    --episodes 250 \
-    --lr 0.0003 \
-    --time_budget 8.0 \
-    --reward_type delta \
-    --train_limit 600 \
-    --val_limit 150 \
-    --test_limit 150
+# [DONE] 20251216_012726_ATT-GEO_n20-30-40_ep250_delta
+# run_experiment "FINAL_ATT_GEO" \
+#     --types "ATT GEO" \
+#     --sizes "20 30 40" \
+#     --episodes 250 \
+#     --lr 0.0003 \
+#     --time_budget 8.0 \
+#     --reward_type delta \
+#     --train_limit 600 \
+#     --val_limit 150 \
+#     --test_limit 150
 
 # =============================================================================
 # 15. Run Final: Escalabilidade Extrema (n=100)
