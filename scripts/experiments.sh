@@ -29,12 +29,11 @@ declare -A TIMINGS
 run_experiment() {
     local name="$1"
     shift
-    local args="$@"
 
     echo
     echo "############################################################"
     echo "# Experimento: $name"
-    echo "# Comando: ./scripts/pipeline.sh $args"
+    echo "# Comando: ./scripts/pipeline.sh $@"
     echo "############################################################"
     echo
 
@@ -44,7 +43,7 @@ run_experiment() {
     fi
 
     local start=$(date +%s)
-    ./scripts/pipeline.sh $args
+    ./scripts/pipeline.sh "$@"
     local end=$(date +%s)
     local duration=$((end - start))
     TIMINGS["$name"]=$duration
@@ -62,10 +61,12 @@ echo "============================================================"
 # -----------------------------------------------------------------------------
 # 1. Experimento Principal: DQN vs Double DQN
 # -----------------------------------------------------------------------------
-run_experiment "1_dqn_vs_double" \
-    --types "EUC_2D" \
-    --sizes "10 20 30" \
-    --episodes 200
+# [DONE] 20251215_210025_EUC_2D_n20-30-40_ep200_delta
+# NOTA: n=10 removido (trivialmente fácil, converge imediatamente para gap ~0%)
+# run_experiment "1_dqn_vs_double" \
+#     --types "EUC_2D" \
+#     --sizes "20 30 40" \
+#     --episodes 200
 
 # -----------------------------------------------------------------------------
 # 2. Comparação de Reward Types
@@ -99,35 +100,49 @@ run_experiment "1_dqn_vs_double" \
 # -----------------------------------------------------------------------------
 # 4. Escalabilidade (Instâncias Maiores)
 # -----------------------------------------------------------------------------
-run_experiment "4_scalability" \
+# [DONE] 20251215_211258_EUC_2D_n50-70_ep300_sparse
+# NOTA: sparse teve val_gap 2.3% vs 5.8% (delta) para n=30
+# run_experiment "4a_scalability_sparse" \
+#     --types "EUC_2D" \
+#     --sizes "50 70" \
+#     --episodes 300 \
+#     --time_budget 10.0 \
+#     --reward_type sparse
+
+# Comparação direta delta vs sparse em instâncias grandes
+# Se a hipótese estiver correta, delta terá gaps maiores que sparse
+run_experiment "4b_scalability_delta" \
     --types "EUC_2D" \
-    --sizes "40 50 70" \
-    --episodes 250 \
-    --time_budget 8.0
+    --sizes "50 70" \
+    --episodes 300 \
+    --time_budget 10.0 \
+    --reward_type delta
 
 # -----------------------------------------------------------------------------
 # 5. Ablação: Efeito do Epsilon
 # -----------------------------------------------------------------------------
-run_experiment "5a_epsilon_default" \
-    --types "EUC_2D" \
-    --sizes "20 30" \
-    --episodes 200 \
-    --epsilon_start 1.0 \
-    --epsilon_end 0.05
+# [DONE] Redundante com 2a_reward_delta (mesmos parâmetros default)
+# run_experiment "5a_epsilon_default" \
+#     --types "EUC_2D" \
+#     --sizes "20 30" \
+#     --episodes 200 \
+#     --epsilon_start 1.0 \
+#     --epsilon_end 0.05
 
-run_experiment "5b_epsilon_less_exploration" \
+run_experiment "5b_epsilon_greedy_early" \
     --types "EUC_2D" \
     --sizes "20 30" \
     --episodes 200 \
     --epsilon_start 0.5 \
     --epsilon_end 0.01
 
-run_experiment "5c_epsilon_more_exploration" \
-    --types "EUC_2D" \
-    --sizes "20 30" \
-    --episodes 200 \
-    --epsilon_start 1.0 \
-    --epsilon_end 0.20
+# [SKIP] Redundante - epsilon_end alto causa instabilidade sem benefício claro
+# run_experiment "5c_epsilon_more_exploration" \
+#     --types "EUC_2D" \
+#     --sizes "20 30" \
+#     --episodes 200 \
+#     --epsilon_start 1.0 \
+#     --epsilon_end 0.20
 
 # -----------------------------------------------------------------------------
 # Resumo
