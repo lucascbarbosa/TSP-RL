@@ -417,16 +417,17 @@ echo "============================================================"
 # =============================================================================
 # Testar limite de escalabilidade do método
 
-run_experiment "FINAL_n100" \
-    --types "EUC_2D" \
-    --sizes "100" \
-    --episodes 400 \
-    --lr 0.0003 \
-    --time_budget 20.0 \
-    --reward_type delta \
-    --train_limit 500 \
-    --val_limit 100 \
-    --test_limit 100
+# [DONE] 20251216_021148_EUC_2D_n100_ep400_delta
+# run_experiment "FINAL_n100" \
+#     --types "EUC_2D" \
+#     --sizes "100" \
+#     --episodes 400 \
+#     --lr 0.0003 \
+#     --time_budget 20.0 \
+#     --reward_type delta \
+#     --train_limit 500 \
+#     --val_limit 100 \
+#     --test_limit 100
 
 # =============================================================================
 # 16. Run Final: Sparse para n=30 (onde foi melhor)
