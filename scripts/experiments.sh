@@ -169,16 +169,17 @@ echo "============================================================"
 # -----------------------------------------------------------------------------
 # 6b. Sparse para múltiplos tipos: Generalização do benefício sparse
 # -----------------------------------------------------------------------------
+# [DONE] 20251215_221609_ATT-GEO_n30-40_ep200_sparse
 # Justificativa: Verificar se sparse também é melhor para ATT/GEO (n=30-40)
-run_experiment "6b_sparse_multitypes" \
-    --types "ATT GEO" \
-    --sizes "30 40" \
-    --episodes 200 \
-    --time_budget 8.0 \
-    --reward_type sparse \
-    --train_limit 300 \
-    --val_limit 80 \
-    --test_limit 80
+# run_experiment "6b_sparse_multitypes" \
+#     --types "ATT GEO" \
+#     --sizes "30 40" \
+#     --episodes 200 \
+#     --time_budget 8.0 \
+#     --reward_type sparse \
+#     --train_limit 300 \
+#     --val_limit 80 \
+#     --test_limit 80
 
 # -----------------------------------------------------------------------------
 # Resumo
