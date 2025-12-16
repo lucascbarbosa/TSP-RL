@@ -117,7 +117,7 @@
 }
 
 % --- Metadados ---
-\title[\sutil{Q-ILS}]{Q-ILS: Integrando Q-Learning \\ e Iterated Local Search para o TSP}
+\title[\sutil{QL-ILS}]{QL-ILS: Integrando Q-Learning \\ e Iterated Local Search para o TSP}
 \author[\sutil{Grupo RL-CO}]{\intsize Gabriel Souto, Leonardo Assumpção, Lucas Barbosa, \\ Matheus Bastos, Rafael Dias}
 \institute[UFRJ]{\intsize PESC/COPPE/UFRJ -- OTIMIA (COS887)}
 \date[]{\sutil{09/12/2025}}
@@ -158,8 +158,8 @@
 \begin{frame}{Objetivos}
   \footnotesize
   \begin{enumerate}
-    \item Propor uma abordagem híbrida \destaque{\emph{Q-ILS}} que integra Q-Learning ao framework do Iterated Local Search.
-    \item \destaque{Aprender}, a partir de execuções em instâncias de treino, qual combinação (construtivo + busca local) tende a melhorar soluções.
+    \item Propor uma abordagem híbrida \destaque{\emph{QL-ILS}} que integra Q-Learning ao framework do Iterated Local Search.
+    \item \destaque{Aprender}, a partir de execuções em instâncias de treino, qual combinação (perturbação + busca local) tende a melhorar soluções.
     \item \destaque{Avaliar} se a política aprendida generaliza para instâncias não vistas.
   \end{enumerate}
   \vspace{4mm}
@@ -237,7 +237,7 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Componentes do Q-ILS}
+\begin{frame}{Componentes do QL-ILS}
   \footnotesize
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
@@ -251,8 +251,7 @@
       \textbf{Buscas Locais:}
       \begin{itemize}
         \item \destaque{2-opt}: troca 2 arestas; $O(n^2)$
-        \item \destaque{3-opt}: troca 3 arestas; mais lento
-        \item \destaque{Lin-Kernighan}: busca variável; mais potente
+        \item \destaque{Lin-Kernighan}: cadeias de 2-opt; mais potente
       \end{itemize}
     \end{column}
     \begin{column}{0.5\textwidth}
@@ -264,8 +263,8 @@
       \vspace{3mm}
       \begin{alertbox}
         {\scriptsize
-        \textbf{9 combinações possíveis:} \\
-        3 construtivos $\times$ 3 buscas locais
+        \textbf{8 combinações de ações:} \\
+        (perturbação ou construtivo) $\times$ busca local
         }
       \end{alertbox}
     \end{column}
@@ -288,7 +287,7 @@
   \begin{itemize}
     \setlength{\itemsep}{0pt}
     \item \destaque{Estado $s$}: gap percentual discretizado
-    \item \destaque{Ação $a$}: (construtivo, busca local)
+    \item \destaque{Ação $a$}: (perturbação, busca local)
     \item \destaque{Transição $T$}: estimada empiricamente
     \item \destaque{Recompensa $R$}: maior para gaps menores
   \end{itemize}
@@ -326,17 +325,16 @@
   \renewcommand{\arraystretch}{1.2}
   \begin{tabular}{cll}
     \toprule
-    \textbf{Ação} & \textbf{Construtivo} & \textbf{Busca Local} \\
+    \textbf{Ação} & \textbf{Perturbação} & \textbf{Busca Local} \\
     \midrule
-    0 & Random & 2-opt \\
-    1 & Random & 3-opt \\
-    2 & Nearest Neighbor & 2-opt \\
-    3 & Nearest Neighbor & 3-opt \\
-    4 & Cheapest Insertion & 2-opt \\
-    5 & Cheapest Insertion & 3-opt \\
-    6 & Random & Lin-Kernighan \\
-    7 & Nearest Neighbor & Lin-Kernighan \\
-    8 & Cheapest Insertion & Lin-Kernighan \\
+    0 & Two Swap & 2-opt \\
+    1 & Two Swap & Lin-Kernighan \\
+    2 & Segment Reverse & 2-opt \\
+    3 & Segment Reverse & Lin-Kernighan \\
+    4 & Random (construtivo) & 2-opt \\
+    5 & Nearest (construtivo) & 2-opt \\
+    6 & Cheapest (construtivo) & 2-opt \\
+    7 & Nearest (construtivo) & Lin-Kernighan \\
     \bottomrule
   \end{tabular}
   \vspace{3mm}
@@ -348,7 +346,7 @@
 \section{Metodologia}
 % ======================================================
 
-\begin{frame}{Fluxo do Q-ILS}
+\begin{frame}{Fluxo do QL-ILS}
   \footnotesize
   \centering
   \begin{columns}[T]
@@ -379,7 +377,7 @@
   \end{calloutbox}
 \end{frame}
 
-\begin{frame}{Loop Principal do Q-ILS}
+\begin{frame}{Loop Principal do QL-ILS}
   \vspace{-3mm}
   \footnotesize
   \begin{columns}[T]
@@ -387,15 +385,14 @@
       \vspace{2mm}
       \textbf{Execução guiada por Q-table:}
       \begin{enumerate}
-        \item Gerar solução inicial
-        \item Aplicar busca local (3-opt)
+        \item Gerar solução inicial (2-opt)
         \item Loop:
           \begin{itemize}
-            \item Perturbar solução
-            \item Calcular estado $s$ (gap)
+            \item Observar estado $s$ (gap)
             \item Consultar Q-table: $a = \arg\max Q(s,a)$
-            \item Executar ação $a$
-            \item Atualizar melhor solução
+            \item Executar ação $a$ (pert + BL)
+            \item Se melhorou: atualizar best
+            \item Sempre: continuar da nova solução
           \end{itemize}
         \item Retornar melhor encontrada
       \end{enumerate}
@@ -561,7 +558,7 @@
   \footnotesize
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
-      \textbf{Vantagens do Q-ILS:}
+      \textbf{Vantagens do QL-ILS:}
       \begin{itemize}
         \item Aprende automaticamente qual estratégia usar
         \item Sem ajuste manual de parâmetros
@@ -589,7 +586,7 @@
 \begin{frame}{Conclusões Esperadas}
   \footnotesize
   \begin{itemize}
-    \item \destaque{Q-ILS} é viável para integrar RL a meta-heurísticas para o TSP.
+    \item \destaque{QL-ILS} é viável para integrar RL a meta-heurísticas para o TSP.
     \item Política aprendida seleciona estratégias adequadas, \\ com gaps competitivos.
     \item Mais eficaz para instâncias pequenas/médias; \\ \emph{`grandes'} ainda apresentam gaps significativos.
     \item Separação \destaque{treino (offline)} / \destaque{execução (online)} \\ permite aplicação rápida.

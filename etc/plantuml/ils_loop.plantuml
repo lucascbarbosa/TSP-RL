@@ -1,5 +1,5 @@
 ' etc/plantuml/ils_loop.plantuml
-' Loop do Q-ILS: agente decide par (perturbação, busca local)
+' Loop do QL-ILS: agente decide par (perturbação, busca local)
 @startuml
 
 skinparam Dpi 300
@@ -21,18 +21,21 @@ skinparam activity {
 skinparam ArrowColor #006446
 skinparam ArrowThickness 2
 
-title Loop do Q-ILS
+title Loop do QL-ILS
 
 start
 
-:Gerar s₀ (Construtivo);
+:Gerar solução inicial
+(construtivo aleatório);
 
-:Busca local inicial (3-opt);
+:Aplicar 2-opt;
 
-:best ← s₀;
+:best ← solução atual
+i ← 0;
 
 repeat
-  :Observar estado s (gap);
+  :Observar estado s
+  (gap da solução atual);
 
   :Consultar Q-table:
   a = argmax Q(s, a);
@@ -40,16 +43,16 @@ repeat
   note right
     Ação a = (Pert, BL)
     ──────────────────
-    **Perturbações:**
+    **Perturbações leves:**
     • two_swap
     • segment_reverse
+    **Perturbações destrutivas:**
     • random (construtivo)
     • nearest (construtivo)
     • cheapest (construtivo)
     ──────────────────
     **Buscas Locais:**
     • 2-opt
-    • 3-opt
     • Lin-Kernighan
   end note
 
@@ -57,14 +60,20 @@ repeat
 
   :Aplicar busca local;
 
-  if (custo < best?) then (sim)
-    :best ← s;
+  if (custo < best.custo?) then (sim)
+    :best ← nova solução;
     :i ← 0;
   else (não)
-    :i++;
+    :i ← i + 1;
   endif
 
-repeat while (i < max?) is (sim)
+  :solução atual ← nova solução;
+  note right
+    ILS sempre continua
+    da nova solução
+  end note
+
+repeat while (i < max_iter?) is (sim)
 ->não;
 
 :Retornar best;

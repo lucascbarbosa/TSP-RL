@@ -1,5 +1,5 @@
 ' etc/plantuml/mdp_mapping.plantuml
-' Mapeamento MDP para o contexto Q-ILS - MDP em cima, Q-ILS embaixo
+' Mapeamento MDP para o contexto QL-ILS - MDP em cima, QL-ILS embaixo
 @startuml
 <style>
   .MDP {
@@ -28,7 +28,7 @@ skinparam rectangle {
 
 top to bottom direction
 
-title Modelagem MDP no Q-ILS
+title Modelagem MDP no QL-ILS
 
 rectangle "**MDP Genérico**" as MDP <<MDP>> {
   rectangle "S: Estados" as S_MDP
@@ -37,9 +37,9 @@ rectangle "**MDP Genérico**" as MDP <<MDP>> {
   rectangle "R: Recompensas" as R_MDP
 }
 
-rectangle "**Q-ILS (TSP)**" as QILS <<QILS>> {
+rectangle "**QL-ILS (TSP)**" as QILS <<QILS>> {
   rectangle "Gap discretizado\n(0-2%, 2-5%, 5-10%,\n>10%, <0%)" as S_QILS
-  rectangle "(Construtivo, Busca Local)\n9 combinações" as A_QILS
+  rectangle "(Perturbação, Busca Local)\n8 combinações" as A_QILS
   rectangle "P(s'|s,a) estimada\nde execuções" as T_QILS
   rectangle "Maior para gaps menores\n(0, 25, 50, 75, 100)" as R_QILS
 }
