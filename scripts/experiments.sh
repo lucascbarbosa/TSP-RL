@@ -235,19 +235,21 @@ echo "============================================================"
 # =============================================================================
 # Default: hidden_dim=64. Testar 32 (menor) e 128 (maior)
 
-run_experiment "9a_hidden_small" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --hidden_dim 32 \
-    --reward_type delta
+# [DONE] 20251215_230213_EUC_2D_n20_ep150_delta
+# run_experiment "9a_hidden_small" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --hidden_dim 32 \
+#     --reward_type delta
 
-run_experiment "9b_hidden_large" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --hidden_dim 128 \
-    --reward_type delta
+# [DONE] 20251215_230416_EUC_2D_n20_ep150_delta
+# run_experiment "9b_hidden_large" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --hidden_dim 128 \
+#     --reward_type delta
 
 # =============================================================================
 # 10. Ablação: Número de Episódios (convergência)
