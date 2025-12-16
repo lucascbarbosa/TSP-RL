@@ -291,6 +291,31 @@ echo "============================================================"
 #     --gamma 0.999 \
 #     --reward_type delta
 
+# =============================================================================
+# 12. Teste de Learning Rate Baixa em Instâncias Maiores
+# =============================================================================
+# Descoberta: lr=0.0003 foi o melhor para n=20 (val_gap=0.10%)
+# Objetivo: Verificar se lr baixa também melhora para n=50 e n=70
+# Resultado: lr=0.0003 só ajuda Double DQN n=50 (4.87% vs 8.56%). Para n=70, lr=0.001 é melhor.
+
+# [DONE] 20251215_233924_EUC_2D_n50_ep300_delta
+# run_experiment "12a_lr_low_n50" \
+#     --types "EUC_2D" \
+#     --sizes "50" \
+#     --episodes 300 \
+#     --lr 0.0003 \
+#     --time_budget 10.0 \
+#     --reward_type delta
+
+# [DONE] 20251215_234659_EUC_2D_n70_ep300_delta
+# run_experiment "12b_lr_low_n70" \
+#     --types "EUC_2D" \
+#     --sizes "70" \
+#     --episodes 300 \
+#     --lr 0.0003 \
+#     --time_budget 10.0 \
+#     --reward_type delta
+
 # -----------------------------------------------------------------------------
 # Resumo
 # -----------------------------------------------------------------------------
