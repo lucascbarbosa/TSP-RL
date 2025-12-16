@@ -145,6 +145,41 @@ echo "============================================================"
 #     --epsilon_start 1.0 \
 #     --epsilon_end 0.20
 
+# =============================================================================
+# 6. Experimentos Complementares (baseados em análise dos resultados anteriores)
+# =============================================================================
+# Descobertas até agora:
+#   - Sparse reward é MUITO melhor para n=30 (val_gap 2.3% vs 5.8%)
+#   - Para n=20, delta é levemente melhor
+#   - Falta n=40 sparse para completar curva de escalabilidade
+#   - Double DQN não melhora consistentemente val_gap, mas reduz Q-overestimation
+
+# -----------------------------------------------------------------------------
+# 6a. Sparse para n=40: Completa curva de escalabilidade
+# -----------------------------------------------------------------------------
+# [DONE] 20251215_220027_EUC_2D_n40_ep250_sparse
+# Justificativa: Temos delta para n=40, mas não sparse. Crucial para comparação.
+# run_experiment "6a_sparse_n40" \
+#     --types "EUC_2D" \
+#     --sizes "40" \
+#     --episodes 250 \
+#     --time_budget 8.0 \
+#     --reward_type sparse
+
+# -----------------------------------------------------------------------------
+# 6b. Sparse para múltiplos tipos: Generalização do benefício sparse
+# -----------------------------------------------------------------------------
+# Justificativa: Verificar se sparse também é melhor para ATT/GEO (n=30-40)
+run_experiment "6b_sparse_multitypes" \
+    --types "ATT GEO" \
+    --sizes "30 40" \
+    --episodes 200 \
+    --time_budget 8.0 \
+    --reward_type sparse \
+    --train_limit 300 \
+    --val_limit 80 \
+    --test_limit 80
+
 # -----------------------------------------------------------------------------
 # Resumo
 # -----------------------------------------------------------------------------
