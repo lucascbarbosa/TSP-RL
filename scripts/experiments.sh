@@ -214,19 +214,21 @@ echo "============================================================"
 # Default: lr=0.001. Testar 0.0003 (mais conservador) e 0.003 (mais agressivo)
 # n=20 para rapidez
 
-run_experiment "8a_lr_low" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --lr 0.0003 \
-    --reward_type delta
+# [DONE] 20251215_225808_EUC_2D_n20_ep150_delta
+# run_experiment "8a_lr_low" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --lr 0.0003 \
+#     --reward_type delta
 
-run_experiment "8b_lr_high" \
-    --types "EUC_2D" \
-    --sizes "20" \
-    --episodes 150 \
-    --lr 0.003 \
-    --reward_type delta
+# [DONE] 20251215_230011_EUC_2D_n20_ep150_delta
+# run_experiment "8b_lr_high" \
+#     --types "EUC_2D" \
+#     --sizes "20" \
+#     --episodes 150 \
+#     --lr 0.003 \
+#     --reward_type delta
 
 # =============================================================================
 # 9. Ablação: Capacidade da Rede (hidden_dim)
